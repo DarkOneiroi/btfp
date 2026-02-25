@@ -1,0 +1,16 @@
+# Binaries
+btfp
+btfp_test
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,20 +1,20 @@
 package tui
 
 import (
+	"btfp/player"
 	"reflect"
 	"testing"
 	"time"
-	"btfp/player"
 )
 
 func TestParseLyrics(t *testing.T) {
 	m := &Model{}
 
 	tests := []struct {
-		name          string
-		content       string
-		expected      []lrcLine
-		expectSynced  bool
+		name         string
+		content      string
+		expected     []lrcLine
+		expectSynced bool
 	}{
 		{
 			name: "Synced lyrics",
@@ -60,7 +60,7 @@ Random line
 			expectSynced: true,
 		},
 		{
-			name: "Lyrics with different line endings",
+			name:    "Lyrics with different line endings",
 			content: "[00:01.00] Line 1\r\n[00:02.00] Line 2\r[00:03.00] Line 3",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "Line 1"},
@@ -103,6 +103,7 @@ func TestCleanString(t *testing.T) {
 	check("Song [Lyrics]", "song")
 	check("Song 4K HD", "song")
 	check("  Space  ", "space")
+	check("King Nothing", "king nothing")
 }
 
 func TestPlaylistCounts(t *testing.T) {
@@ -113,14 +114,18 @@ func TestPlaylistCounts(t *testing.T) {
 			{Path: "/home/user/Music/B/1.mp3"},
 		},
 	}
-	
+
 	m.updatePlaylistCounts()
-	
+
 	if m.playlistCounts["/home/user/Music/A/1.mp3"] != 1 {
-		t.Errorf("Track count wrong, got %d", m.playlistCounts["/home/user/Music/A/1.mp3"])
+		t.Errorf("Track count wrong for file, got %d", m.playlistCounts["/home/user/Music/A/1.mp3"])
 	}
-	
+
 	if m.playlistCounts["/home/user/Music/A"] != 2 {
-		t.Errorf("Dir count wrong, got %d", m.playlistCounts["/home/user/Music/A"])
+		t.Errorf("Dir count wrong for A, got %d", m.playlistCounts["/home/user/Music/A"])
+	}
+
+	if m.playlistCounts["/home/user/Music"] != 3 {
+		t.Errorf("Dir count wrong for Music, got %d", m.playlistCounts["/home/user/Music"])
 	}
 }

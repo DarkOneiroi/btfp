@@ -4,92 +4,90 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pelletier/go-toml/v2"
+	"github.com/BurntSushi/toml"
 )
 
+// Config defines the application settings
 type Config struct {
+	MusicPath          string `toml:"music_path"`
 	DefaultView        int    `toml:"default_view"`
-	Theme              string `toml:"theme"`
-	GromaPath          string `toml:"groma_path"`
-	ImagePath          string `toml:"image_path"`
-	AutoDownloadArt    bool   `toml:"auto_download_art"`
-	AutoDownloadLyrics bool   `toml:"auto_download_lyrics"`
-	UpdateMetadata     bool   `toml:"update_metadata"`
-	ShowLegend         bool   `toml:"show_legend"`
 	BGMode             int    `toml:"bg_mode"`
 	Pattern            int    `toml:"pattern"`
 	ColorMode          int    `toml:"color_mode"`
 	Palette            int    `toml:"palette"`
-	EQColorMode        int    `toml:"eq_color_mode"`
-	EQPalette          int    `toml:"eq_palette"`
+	ShowLegend         bool   `toml:"show_legend"`
+	AutoDownloadArt    bool   `toml:"auto_download_art"`
+	AutoDownloadLyrics bool   `toml:"auto_download_lyrics"`
+	UpdateMetadata     bool   `toml:"update_metadata"`
+	ImagePath          string `toml:"image_path"`
+	Theme              string `toml:"theme"`
 }
 
+// Theme defines the ANSI color codes for UI components
 type Theme struct {
-	Title     string `toml:"title"`
 	Accent    string `toml:"accent"`
-	Highlight string `toml:"highlight"`
+	Title     string `toml:"title"`
 	Text      string `toml:"text"`
 	Subtext   string `toml:"subtext"`
+	Highlight string `toml:"highlight"`
 }
 
+// LoadConfig reads the application configuration from Disk
 func LoadConfig() (Config, Theme) {
 	home, _ := os.UserHomeDir()
+	configDir := filepath.Join(home, ".config", "btfp")
+	configPath := filepath.Join(configDir, "config.toml")
+
 	c := Config{
+		MusicPath:          filepath.Join(home, "Music"),
 		DefaultView:        0,
-		Theme:              "omarchy",
-		GromaPath:          filepath.Join(home, "go/bin/groma"),
-		ImagePath:          "",
-		AutoDownloadArt:    true,
-		AutoDownloadLyrics: true,
-		UpdateMetadata:     true,
-		ShowLegend:         false,
 		BGMode:             0,
 		Pattern:            0,
 		ColorMode:          0,
 		Palette:            0,
-		EQColorMode:        0,
-		EQPalette:          0,
+		ShowLegend:         true,
+		AutoDownloadLyrics: true,
+		AutoDownloadArt:    true,
+		UpdateMetadata:     true,
+		Theme:              "default",
 	}
 
-	configDir := filepath.Join(home, ".config", "btfp")
-	os.MkdirAll(configDir, 0755)
-
-	configPath := filepath.Join(configDir, "config.toml")
+	_ = os.MkdirAll(configDir, 0755)
 	if data, err := os.ReadFile(configPath); err == nil {
-		toml.Unmarshal(data, &c)
-	} else {
-		saveFile(configPath, c)
+		_, _ = toml.Decode(string(data), &c)
 	}
 
-	theme := LoadTheme(c.Theme)
-	return c, theme
+	return c, LoadTheme(c.Theme)
 }
 
+// LoadTheme reads a theme file from disk or returns the default theme
 func LoadTheme(name string) Theme {
-	t := Theme{
-		Title:     "63",
-		Accent:    "13",
-		Highlight: "10",
-		Text:      "15",
-		Subtext:   "245",
-	}
-
 	home, _ := os.UserHomeDir()
 	themePath := filepath.Join(home, ".config", "btfp", "themes", name+".toml")
-	os.MkdirAll(filepath.Dir(themePath), 0755)
 
+	t := Theme{
+		Accent:    "63",
+		Title:     "255",
+		Text:      "252",
+		Subtext:   "245",
+		Highlight: "214",
+	}
+
+	_ = os.MkdirAll(filepath.Dir(themePath), 0755)
 	if data, err := os.ReadFile(themePath); err == nil {
-		toml.Unmarshal(data, &t)
-	} else {
-		saveFile(themePath, t)
+		_, _ = toml.Decode(string(data), &t)
+	} else if name == "default" {
+		// Save default theme if it doesn't exist
+		// Note: error ignored intentionally during config init
+		writeDefaultTheme(themePath, t)
 	}
 
 	return t
 }
 
-func saveFile(path string, v interface{}) {
-	data, err := toml.Marshal(v)
+func writeDefaultTheme(path string, t Theme) {
+	data, err := toml.Marshal(t)
 	if err == nil {
-		os.WriteFile(path, data, 0644)
+		_ = os.WriteFile(path, data, 0644)
 	}
 }

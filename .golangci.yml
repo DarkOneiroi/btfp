@@ -1,0 +1,30 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+    - typecheck
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+  govet:
+    enable:
+      - shadow
+
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0

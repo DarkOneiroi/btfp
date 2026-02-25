@@ -1,21 +1,23 @@
 package server
 
 import (
-	"encoding/gob"
-	"fmt"
 	"btfp/ipc"
 	"btfp/player"
+	"encoding/gob"
+	"fmt"
 	"net"
 	"os"
 	"sync"
 	"time"
 )
 
+// Client represents a connected IPC client
 type Client struct {
 	conn net.Conn
 	enc  *gob.Encoder
 }
 
+// Server represents the main IPC server managing the player and clients
 type Server struct {
 	player     *player.MusicPlayer
 	playlist   []player.Track
@@ -26,14 +28,22 @@ type Server struct {
 	listener   net.Listener
 }
 
+// Start initializes and runs the IPC server
 func Start() {
-	os.Remove(ipc.SocketPath)
+	_ = os.Remove(ipc.SocketPath)
+
+	// Register types for interface{} encoding
+	gob.Register(time.Duration(0))
+	gob.Register(0)
+	gob.Register(player.Track{})
+	gob.Register([]player.Track{})
+
 	listener, err := net.Listen("unix", ipc.SocketPath)
 	if err != nil {
 		fmt.Printf("Failed to start server: %v\n", err)
 		return
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := &Server{
 		player:     player.NewMusicPlayer(),
@@ -49,13 +59,14 @@ func Start() {
 			s.mu.Lock()
 			if s.player.IsDone && len(s.playlist) > 0 {
 				s.playingIdx = (s.playingIdx + 1) % len(s.playlist)
-				s.player.PlayTrack(&s.playlist[s.playingIdx])
+				_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 			}
 			shouldQuit := s.shouldQuit
 			s.mu.Unlock()
 			s.broadcastState()
 			if shouldQuit {
-				s.listener.Close()
+				time.Sleep(100 * time.Millisecond) // Give clients time to receive quit signal
+				_ = s.listener.Close()
 				os.Exit(0)
 			}
 		}
@@ -71,7 +82,7 @@ func Start() {
 			}
 			continue
 		}
-		
+
 		s.mu.Lock()
 		client := &Client{
 			conn: conn,
@@ -79,7 +90,7 @@ func Start() {
 		}
 		s.clients[conn] = client
 		s.mu.Unlock()
-		
+
 		go s.handleClient(client)
 	}
 }
@@ -89,7 +100,7 @@ func (s *Server) handleClient(c *Client) {
 		s.mu.Lock()
 		delete(s.clients, c.conn)
 		s.mu.Unlock()
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	dec := gob.NewDecoder(c.conn)
@@ -110,7 +121,7 @@ func (s *Server) processCommand(cmd ipc.Command) {
 	case ipc.CmdPlay:
 		if p, ok := cmd.Payload.(int); ok && p >= 0 && p < len(s.playlist) {
 			s.playingIdx = p
-			s.player.PlayTrack(&s.playlist[s.playingIdx])
+			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 		} else {
 			s.player.TogglePause()
 		}
@@ -119,20 +130,26 @@ func (s *Server) processCommand(cmd ipc.Command) {
 	case ipc.CmdNext:
 		if len(s.playlist) > 0 {
 			s.playingIdx = (s.playingIdx + 1) % len(s.playlist)
-			s.player.PlayTrack(&s.playlist[s.playingIdx])
+			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 		}
 	case ipc.CmdPrev:
 		if len(s.playlist) > 0 {
 			s.playingIdx = (s.playingIdx - 1 + len(s.playlist)) % len(s.playlist)
-			s.player.PlayTrack(&s.playlist[s.playingIdx])
+			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 		}
 	case ipc.CmdAddTrack:
 		if t, ok := cmd.Payload.(player.Track); ok {
 			s.playlist = append(s.playlist, t)
 			if s.playingIdx == -1 {
 				s.playingIdx = 0
-				s.player.PlayTrack(&s.playlist[0])
+				_ = s.player.PlayTrack(&s.playlist[0])
 			}
+		}
+	case ipc.CmdPlayTrack:
+		if t, ok := cmd.Payload.(player.Track); ok {
+			s.playlist = append(s.playlist, t)
+			s.playingIdx = len(s.playlist) - 1
+			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 		}
 	case ipc.CmdVolume:
 		if v, ok := cmd.Payload.(float64); ok {
@@ -169,21 +186,22 @@ func (s *Server) broadcastState() {
 	}
 
 	state := ipc.PlayerState{
-		CurrentTrack: current,
-		IsPlaying:    s.player.IsPlaying,
-		IsMuted:      s.player.IsMuted,
-		Volume:       s.player.Volume,
-		Elapsed:      s.player.Elapsed,
-		Playlist:     playlist,
-		PlayingIdx:   s.playingIdx,
-		ShouldQuit:   s.shouldQuit,
+		CurrentTrack:  current,
+		IsPlaying:     s.player.IsPlaying,
+		IsMuted:       s.player.IsMuted,
+		Volume:        s.player.Volume,
+		Elapsed:       s.player.Elapsed,
+		Playlist:      playlist,
+		PlayingIdx:    s.playingIdx,
+		ShouldQuit:    s.shouldQuit,
 		ActiveClients: len(s.clients),
 	}
 
 	for _, c := range s.clients {
-		c.conn.SetWriteDeadline(time.Now().Add(20 * time.Millisecond))
+		_ = c.conn.SetWriteDeadline(time.Now().Add(20 * time.Millisecond))
 		if err := c.enc.Encode(state); err != nil {
 			// Connection error, will be handled by handleClient return
+			continue
 		}
 	}
 }

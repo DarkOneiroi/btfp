@@ -1,10 +1,11 @@
 package utils
 
 import (
-	"strings"
 	"path/filepath"
+	"strings"
 )
 
+// SupportedExtensions is a list of audio file extensions supported by btfp
 var SupportedExtensions = []string{
 	".mp3",
 	".wav",
@@ -17,6 +18,7 @@ var SupportedExtensions = []string{
 	".opus",
 }
 
+// IsSupportedAudioFile returns true if the file extension is in the supported list
 func IsSupportedAudioFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	for _, supported := range SupportedExtensions {

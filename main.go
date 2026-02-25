@@ -2,6 +2,7 @@ package main
 
 import (
 	"btfp/ipc"
+	"btfp/player"
 	"btfp/server"
 	"btfp/tui"
 	"encoding/gob"
@@ -11,42 +12,25 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	daemonFlag := flag.Bool("daemon", false, "Start as background server")
+	// Register types for interface{} encoding
+	gob.Register(time.Duration(0))
+	gob.Register(0)
+	gob.Register(player.Track{})
+	gob.Register([]player.Track{})
+
+	daemonFlag := flag.Bool("daemon", false, "Start as server daemon")
 	viewFlag := flag.String("view", "", "Start in specific view (library, playlist, player, viz)")
 	allFlag := flag.Bool("all", false, "Start all 4 views in separate terminal windows")
 	waybarFlag := flag.String("waybar", "none", "Output Waybar JSON status (all, prev, status, next, mute, song)")
 	remoteFlag := flag.String("remote", "none", "Send remote command (play, pause, next, prev, mute)")
 	flag.Parse()
 
-	// Check for subcommands in positional arguments
-	args := flag.Args()
-	if len(args) > 0 {
-		switch args[0] {
-		case "waybar":
-			comp := "all"
-			if len(args) > 1 {
-				comp = args[1]
-			}
-			outputWaybar(comp)
-			return
-		case "remote":
-			cmd := "pause"
-			if len(args) > 1 {
-				cmd = args[1]
-			}
-			sendRemote(cmd)
-			return
-		}
-	}
-
-	// Handle flags
 	if *daemonFlag {
 		server.Start()
 		return
@@ -72,7 +56,7 @@ func main() {
 	if err != nil {
 		// No server, start one and retry
 		go server.Start()
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		conn, err = net.Dial("unix", ipc.SocketPath)
 		if err != nil {
 			fmt.Println("Starting standalone mode...")
@@ -80,7 +64,7 @@ func main() {
 			return
 		}
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	runClient(conn, *viewFlag)
 }
@@ -88,14 +72,14 @@ func main() {
 func startAll() {
 	views := []string{"playlist", "player", "viz"}
 	for _, v := range views {
-		exec.Command("wezterm", "start", os.Args[0], "--view", v).Start()
+		_ = exec.Command("wezterm", "start", os.Args[0], "--view", v).Start()
 	}
 }
 
 func startTUI(view string, conn net.Conn) {
 	m := tui.NewModel(view)
 	if conn != nil {
-		m.SetConn(conn)
+		m.SetConn(conn, gob.NewEncoder(conn), gob.NewDecoder(conn))
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
@@ -108,91 +92,60 @@ func runClient(conn net.Conn, view string) {
 	startTUI(view, conn)
 }
 
-func outputWaybar(component string) {
+func outputWaybar(mode string) {
 	conn, err := net.Dial("unix", ipc.SocketPath)
 	if err != nil {
-		// Return empty output if server not running
-		fmt.Println("{}")
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
-	// Request state
+	_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
 	dec := gob.NewDecoder(conn)
-	
 	var state ipc.PlayerState
-	conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
 	if err := dec.Decode(&state); err != nil {
-		fmt.Println("{}")
 		return
 	}
 
-	if state.ActiveClients <= 0 {
-		fmt.Println("{}")
-		return
-	}
-
-	status := "󰐊" // Play icon
+	output := make(map[string]interface{})
+	status := ""
 	if state.IsPlaying {
-		status = "󰏤" // Pause icon
+		status = ""
 	}
-	mute := "󰕾"
 	if state.IsMuted {
-		mute = "󰝟"
+		status = "󰝟"
 	}
 
-	song := "No track"
+	song := "Stopped"
 	if state.CurrentTrack != nil {
 		song = fmt.Sprintf("%s - %s", state.CurrentTrack.Artist, state.CurrentTrack.Title)
 	}
 
-	// Use play/pause icons for the status indicator
-	icon := "󰏤" // Pause icon (showing it is paused)
-	if state.IsPlaying {
-		icon = "󰐊" // Play icon (showing it is playing)
-	}
-
-	var text string
-	switch component {
-	case "prev":
-		text = "󰒮"
+	switch mode {
 	case "status":
-		text = status
-	case "next":
-		text = "󰒭"
-	case "mute":
-		text = mute
+		fmt.Println(status)
 	case "song":
-		text = song
-	default: // "all" or anything else
-		text = fmt.Sprintf("%s %s", icon, song)
+		fmt.Println(song)
+	case "all":
+		output["text"] = fmt.Sprintf("%s %s", status, song)
+		output["tooltip"] = song
+		output["class"] = "custom-btfp"
+		_ = json.NewEncoder(os.Stdout).Encode(output)
 	}
-
-	output := map[string]string{
-		"text":    text,
-		"tooltip": fmt.Sprintf("BehindTheForestPlayer (BTFP)\nTrack: %s\nVolume: %d%%", song, int(state.Volume*100)),
-		"class":   "custom-btfp",
-	}
-	
-	if state.IsPlaying {
-		output["class"] = "custom-btfp playing"
-	}
-
-	json.NewEncoder(os.Stdout).Encode(output)
 }
 
 func sendRemote(cmd string) {
 	conn, err := net.Dial("unix", ipc.SocketPath)
 	if err != nil {
-		fmt.Printf("Error: no BTFP server running\n")
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	enc := gob.NewEncoder(conn)
 	var c ipc.Command
-	switch strings.ToLower(cmd) {
-	case "play", "pause":
+	switch cmd {
+	case "play":
+		c = ipc.Command{Type: ipc.CmdPlay}
+	case "pause":
 		c = ipc.Command{Type: ipc.CmdPause}
 	case "next":
 		c = ipc.Command{Type: ipc.CmdNext}
@@ -204,5 +157,5 @@ func sendRemote(cmd string) {
 		fmt.Printf("Unknown command: %s\n", cmd)
 		return
 	}
-	enc.Encode(c)
+	_ = enc.Encode(c)
 }

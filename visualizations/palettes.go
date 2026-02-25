@@ -1,101 +1,77 @@
 package visualizations
 
+// PaletteType defines the set of characters used for rendering
 type PaletteType int
 
 const (
+	// PaletteStandard uses a set of standard density characters
 	PaletteStandard PaletteType = iota
+	// PaletteBlocks uses block-style characters
 	PaletteBlocks
-	PaletteCircles
-	PaletteSmooth
+	// PaletteBraille uses braille-dot characters
 	PaletteBraille
-	PaletteGeometric
-	PaletteMixed
-	PaletteDots
-	PaletteExtended
+	// PaletteASCII uses only basic ASCII characters
+	PaletteASCII
+	// PaletteSimple uses a minimal set of characters
 	PaletteSimple
-	PaletteShades
+	// PaletteDetailed uses a wide range of characters for high detail
+	PaletteDetailed
+	// PaletteBinary uses only 0 and 1
+	PaletteBinary
+	// PaletteHex uses hexadecimal characters
+	PaletteHex
+	// PaletteDots uses only dot characters
+	PaletteDots
+	// PaletteLines uses line-drawing characters
 	PaletteLines
-	PaletteTriangles
-	PaletteArrows
-	PalettePowerline
-	PaletteBoxDraw
+	// PaletteMath uses mathematical symbols
+	PaletteMath
+	// PaletteShades uses grayscale shade blocks
+	PaletteShades
+	// PaletteGradient uses a smooth character gradient
+	PaletteGradient
+	// PaletteMatrix uses characters reminiscent of the Matrix movie
+	PaletteMatrix
+	// PaletteMinimal uses only two characters
+	PaletteMinimal
+	// PaletteTypeCount is the total number of palettes
 	PaletteTypeCount
 )
 
-func (p PaletteType) String() string {
-	switch p {
-	case PaletteStandard:
-		return "Standard"
-	case PaletteBlocks:
-		return "Blocks"
-	case PaletteCircles:
-		return "Circles"
-	case PaletteSmooth:
-		return "Smooth"
-	case PaletteBraille:
-		return "Braille"
-	case PaletteGeometric:
-		return "Geometric"
-	case PaletteMixed:
-		return "Mixed"
-	case PaletteDots:
-		return "Dots"
-	case PaletteExtended:
-		return "Extended"
-	case PaletteSimple:
-		return "Simple"
-	case PaletteShades:
-		return "Shades"
-	case PaletteLines:
-		return "Lines"
-	case PaletteTriangles:
-		return "Triangles"
-	case PaletteArrows:
-		return "Arrows"
-	case PalettePowerline:
-		return "Powerline"
-	case PaletteBoxDraw:
-		return "BoxDraw"
-	default:
-		return "Unknown"
-	}
-}
-
+// GetCharacters returns the slice of runes associated with a PaletteType
 func GetCharacters(p PaletteType) []rune {
 	switch p {
-	case PaletteStandard:
-		return []rune{' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'}
 	case PaletteBlocks:
-		return []rune{' ', '░', '▒', '▓', '█'}
-	case PaletteCircles:
-		return []rune{' ', '·', '∘', '○', '◌', '◍', '◎', '◉', '●', '█'}
-	case PaletteSmooth:
-		return []rune{' ', '·', '∘', '○', '◌', '◍', '◎', '◉', '●', '█'}
+		return []rune(" ░▒▓█")
 	case PaletteBraille:
-		return []rune{' ', '⠁', '⠃', '⠇', '⠏', '⠟', '⠿', '⡿', '⣿'}
-	case PaletteGeometric:
-		return []rune{' ', '▪', '▫', '▬', '▭', '▮', '▯', '■', '█'}
-	case PaletteMixed:
-		return []rune{' ', '·', '∘', '░', '▒', '▓', '●', '◉', '■', '█'}
-	case PaletteDots:
-		return []rune{' ', '⡀', '⡄', '⡆', '⡇', '⣇', '⣧', '⣷', '⣿'}
-	case PaletteExtended:
-		return []rune{' ', '.', '\'', '`', '^', '"', ',', ':', ';', 'I', 'l', '!', 'i', '>', '<', '~', '+', '_', '-', '?', ']', '[', '}', '{', '1', ')', '(', '|', '\\', '/', 't', 'f', 'j', 'r', 'x', 'n', 'u', 'v', 'c', 'z', 'X', 'Y', 'U', 'J', 'C', 'L', 'Q', '0', 'O', 'Z', 'm', 'w', 'q', 'p', 'd', 'b', 'k', 'h', 'a', 'o', '*', '#', 'M', 'W', '&', '8', '%', 'B', '@', '$'}
+		return []rune(" ⠁⠂⠃⠄⠅⠆⠇⡀⡁⡂⡃⡄⡅⡆⡇")
+	case PaletteASCII:
+		return []rune(" .:-=+*#%@")
 	case PaletteSimple:
-		return []rune{' ', '.', 'o', 'O', '@'}
-	case PaletteShades:
-		return []rune{' ', '░', '░', '▒', '▒', '▓', '▓', '█', '█'}
+		return []rune(" .oO@")
+	case PaletteDetailed:
+		return []rune(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczMWQH8JPK6A4d25gbp9qwmkLO0UYXZE")
+	case PaletteBinary:
+		return []rune(" 01")
+	case PaletteHex:
+		return []rune(" 0123456789ABCDEF")
+	case PaletteDots:
+		return []rune(" .·•●")
 	case PaletteLines:
-		return []rune{' ', '╌', '╍', '┄', '┅', '┈', '┉', '━', '█'}
-	case PaletteTriangles:
-		return []rune{' ', '▵', '▴', '▿', '▾', '◂', '◃', '▸', '▹'}
-	case PaletteArrows:
-		return []rune{' ', '›', '»', '⟩', '→', '⇒', '⟹', '⟾', '▶'}
-	case PalettePowerline:
-		return []rune{' ', '\ue0b0', '\ue0b1', '\ue0b2', '\ue0b3', '\ue0b4', '\ue0b5', '\ue0b6', '█'}
-	case PaletteBoxDraw:
-		return []rune{' ', '─', '━', '│', '┃', '┼', '╋', '╬', '█'}
+		return []rune(" ─│┌┐└┘├┤┬┴┼")
+	case PaletteMath:
+		return []rune(" +-×÷=≠≈∞∑∏")
+	case PaletteShades:
+		return []rune(" ░▒▓█")
+	case PaletteGradient:
+		return []rune(" .:-=+*#%@")
+	case PaletteMatrix:
+		return []rune(" 0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~")
+	case PaletteMinimal:
+		return []rune(" #")
+	case PaletteStandard:
+		fallthrough
 	default:
-		return []rune{' ', '@'}
+		return []rune(" .:-=+*#%@")
 	}
 }

@@ -1,9 +1,9 @@
 package player
 
 import (
-	"io"
+	"fmt"
+	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +17,7 @@ import (
 	"github.com/gopxl/beep/wav"
 )
 
+// Track represents a single audio track and its metadata
 type Track struct {
 	Title  string
 	Artist string
@@ -24,6 +25,7 @@ type Track struct {
 	Length time.Duration
 }
 
+// MusicPlayer handles the audio playback lifecycle
 type MusicPlayer struct {
 	CurrentTrack *Track
 	IsPlaying    bool
@@ -38,15 +40,17 @@ type MusicPlayer struct {
 	sampleRate   beep.SampleRate
 }
 
+// NewMusicPlayer creates and initializes a new music player instance
 func NewMusicPlayer() *MusicPlayer {
 	return &MusicPlayer{
 		Volume: 1.0,
 	}
 }
 
+// PlayTrack starts playback of the given track, selecting the appropriate decoder
 func (p *MusicPlayer) PlayTrack(t *Track) error {
 	if p.streamer != nil {
-		p.streamer.Close()
+		_ = p.streamer.Close()
 	}
 
 	var streamer beep.StreamSeekCloser
@@ -55,8 +59,8 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 	var f *os.File
 
 	ext := strings.ToLower(filepath.Ext(t.Path))
-	
-	// Native decoders
+
+	// Strategy: Attempt native decoding first for efficiency
 	switch ext {
 	case ".mp3":
 		f, err = os.Open(t.Path)
@@ -79,21 +83,21 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 			streamer, format, err = vorbis.Decode(f)
 		}
 	default:
-		// Fallback to ffmpeg for other formats
+		// Fallback to ffmpeg for universal compatibility (M4A, AAC, etc.)
 		streamer, format, err = p.decodeWithFFmpeg(t.Path)
 	}
 
+	// Recovery Strategy: If native decoding fails, try FFmpeg as a last resort
 	if err != nil {
 		if f != nil {
-			f.Close()
+			_ = f.Close()
 		}
-		// If native failed, try ffmpeg as ultimate fallback
 		if ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" {
 			streamer, format, err = p.decodeWithFFmpeg(t.Path)
 		}
-		
+
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to decode track %s: %w", t.Path, err)
 		}
 	}
 
@@ -105,13 +109,17 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 		t.Length = format.SampleRate.D(streamer.Len()).Round(time.Second)
 	}
 
+	// Initialize speaker if this is the first track
 	if p.ctrl == nil {
-		speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/10))
+		err = speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/10))
+		if err != nil {
+			return fmt.Errorf("failed to initialize speaker: %w", err)
+		}
 	}
 
 	p.ctrl = &beep.Ctrl{Streamer: streamer, Paused: false}
 
-	// Set up volume control
+	// Set up volume control effect
 	p.volumeCtrl = &effects.Volume{
 		Streamer: p.ctrl,
 		Base:     2,
@@ -129,54 +137,7 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 	return nil
 }
 
-type ffmpegStreamer struct {
-	beep.StreamSeekCloser
-	io.Closer
-	cmd *exec.Cmd
-}
-
-func (fs *ffmpegStreamer) Close() error {
-	err1 := fs.StreamSeekCloser.Close()
-	err2 := fs.Closer.Close()
-	if fs.cmd.Process != nil {
-		fs.cmd.Process.Kill()
-	}
-	if err1 != nil {
-		return err1
-	}
-	return err2
-}
-
-func (p *MusicPlayer) decodeWithFFmpeg(path string) (beep.StreamSeekCloser, beep.Format, error) {
-	// ffmpeg -i input -f wav -
-	cmd := exec.Command("ffmpeg", "-i", path, "-f", "wav", "pipe:1")
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, beep.Format{}, err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, beep.Format{}, err
-	}
-
-	// We use wav.Decode because we are piping wav from ffmpeg
-	streamer, format, err := wav.Decode(stdout)
-	if err != nil {
-		stdout.Close()
-		cmd.Process.Kill()
-		return nil, beep.Format{}, err
-	}
-
-	// Wrap the streamer to close the pipe and kill the process when done
-	wrapped := &ffmpegStreamer{
-		StreamSeekCloser: streamer,
-		Closer:           stdout,
-		cmd:              cmd,
-	}
-
-	return wrapped, format, nil
-}
-
+// TogglePause toggles the play/pause state of the player
 func (p *MusicPlayer) TogglePause() {
 	if p.ctrl != nil {
 		p.ctrl.Paused = !p.ctrl.Paused
@@ -184,25 +145,7 @@ func (p *MusicPlayer) TogglePause() {
 	}
 }
 
-func (p *MusicPlayer) Seek(offset time.Duration) {
-	if p.streamer == nil {
-		return
-	}
-
-	newPos := p.streamer.Position() + p.sampleRate.N(offset)
-	if newPos < 0 {
-		newPos = 0
-	}
-	if newPos >= p.streamer.Len() {
-		p.IsDone = true
-		return
-	}
-
-	speaker.Lock()
-	p.streamer.Seek(newPos)
-	speaker.Unlock()
-}
-
+// SetVolume sets the player volume (0.0 to 1.0)
 func (p *MusicPlayer) SetVolume(v float64) {
 	if v < 0 {
 		v = 0
@@ -211,38 +154,56 @@ func (p *MusicPlayer) SetVolume(v float64) {
 		v = 1
 	}
 	p.Volume = v
-	p.IsMuted = false
-	p.applyVolume()
+	if !p.IsMuted {
+		p.applyVolume()
+	}
 }
 
+// ToggleMute toggles the mute state
 func (p *MusicPlayer) ToggleMute() {
 	if p.IsMuted {
-		p.Volume = p.prevVolume
 		p.IsMuted = false
+		p.Volume = p.prevVolume
 	} else {
+		p.IsMuted = true
 		p.prevVolume = p.Volume
 		p.Volume = 0
-		p.IsMuted = true
 	}
 	p.applyVolume()
 }
 
 func (p *MusicPlayer) applyVolume() {
-	if p.volumeCtrl == nil {
+	if p.volumeCtrl != nil {
+		// Beep's volume is logarithmic. Volume 0 is 1.0x, -1 is 0.5x, etc.
+		// We map 0.0-1.0 to something reasonable.
+		if p.Volume == 0 {
+			p.volumeCtrl.Volume = -10 // Close to silent
+		} else {
+			p.volumeCtrl.Volume = math.Log2(p.Volume)
+		}
+	}
+}
+
+// Seek moves the playback position by the given duration
+func (p *MusicPlayer) Seek(d time.Duration) {
+	if p.streamer == nil {
 		return
 	}
-	speaker.Lock()
-	// Beep volume is logarithmic. Volume 0 is multiplier 1.
-	// We'll map 0.0-1.0 to a useful range.
-	if p.Volume <= 0 {
-		p.volumeCtrl.Volume = -10 // Effectively silent
-	} else {
-		// Map 0.1-1.0 to -3.0 to 0.0
-		p.volumeCtrl.Volume = (p.Volume - 1.0) * 3.0
+
+	newPos := p.streamer.Position() + p.sampleRate.N(d)
+	if newPos < 0 {
+		newPos = 0
 	}
+	if newPos >= p.streamer.Len() {
+		newPos = p.streamer.Len() - 1
+	}
+
+	speaker.Lock()
+	_ = p.streamer.Seek(newPos)
 	speaker.Unlock()
 }
 
+// Update refreshes the player's internal state (elapsed time, completion)
 func (p *MusicPlayer) Update() {
 	if p.IsPlaying && p.streamer != nil {
 		pos := p.streamer.Position()

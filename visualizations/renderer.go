@@ -6,20 +6,31 @@ import (
 	"strings"
 )
 
+// PatternType defines the type of visualization pattern to render
 type PatternType int
 
 const (
+	// PatternPlasma renders a classic plasma effect
 	PatternPlasma PatternType = iota
+	// PatternWaves renders sine wave interference
 	PatternWaves
+	// PatternRipples renders circular ripples
 	PatternRipples
+	// PatternVortex renders a spinning vortex
 	PatternVortex
+	// PatternGeometric renders tiled geometric shapes
 	PatternGeometric
+	// PatternSpiral renders a logarithmic spiral
 	PatternSpiral
+	// PatternGrid renders a pulsating grid
 	PatternGrid
+	// PatternTypeCount is the number of standard patterns
 	PatternTypeCount
+	// PatternEQ renders frequency bars
 	PatternEQ
 )
 
+// String returns the human-readable name of the pattern
 func (p PatternType) String() string {
 	switch p {
 	case PatternPlasma:
@@ -43,19 +54,29 @@ func (p PatternType) String() string {
 	}
 }
 
+// ColorMode defines the color scheme for rendering
 type ColorMode int
 
 const (
+	// ColorRainbow uses a full spectrum of colors
 	ColorRainbow ColorMode = iota
+	// ColorMonochrome uses grayscale levels
 	ColorMonochrome
+	// ColorFire uses reds, oranges, and yellows
 	ColorFire
+	// ColorOcean uses blues and cyans
 	ColorOcean
+	// ColorNeon uses high-contrast vibrant colors
 	ColorNeon
+	// ColorCool uses cool greens and blues
 	ColorCool
+	// ColorChromatic uses wide-band chromatic colors
 	ColorChromatic
+	// ColorModeCount is the number of color modes
 	ColorModeCount
 )
 
+// String returns the human-readable name of the color mode
 func (c ColorMode) String() string {
 	switch c {
 	case ColorRainbow:
@@ -77,6 +98,7 @@ func (c ColorMode) String() string {
 	}
 }
 
+// Frame represents a single frame of visualization data
 type Frame struct {
 	Width         int
 	Height        int
@@ -89,6 +111,7 @@ type Frame struct {
 	AudioLevels   []float64
 }
 
+// NewFrame creates a new visualization frame with the given dimensions
 func NewFrame(width, height int, pattern PatternType) *Frame {
 	return &Frame{
 		Width:       width,
@@ -101,10 +124,12 @@ func NewFrame(width, height int, pattern PatternType) *Frame {
 	}
 }
 
+// Update increments the internal timer of the frame
 func (f *Frame) Update(dt float64) {
 	f.Time += dt
 }
 
+// GeneratePattern populates the frame data based on the current pattern and audio level
 func (f *Frame) GeneratePattern(audioLevel float64) {
 	t := f.Time
 	for y := 0; y < f.Height; y++ {
@@ -210,6 +235,7 @@ func (f *Frame) genEQ(u, v, t, audioLevel float64) float64 {
 	return 0.0
 }
 
+// Render converts the frame data to an ANSI colored string
 func (f *Frame) Render(streamMode bool) string {
 	var sb strings.Builder
 	chars := GetCharacters(f.PaletteType)
@@ -231,7 +257,7 @@ func (f *Frame) Render(streamMode bool) string {
 			}
 			char := chars[charIdx]
 			color := f.getColor(val, x, y)
-			sb.WriteString(fmt.Sprintf("\x1b[38;5;%dm%c\x1b[0m", color, char))
+			fmt.Fprintf(&sb, "\x1b[38;5;%dm%c\x1b[0m", color, char)
 		}
 		if y < f.Height-1 || streamMode {
 			sb.WriteString("\n")

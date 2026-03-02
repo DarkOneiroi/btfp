@@ -61,8 +61,7 @@ func (m *Model) getBackground() string {
 
 func (m *Model) renderListView(l list.Model) string {
 	view := l.View()
-	lines := strings.Split(view, "
-")
+	lines := strings.Split(view, "\n")
 	h := l.Height()
 	if h <= 0 {
 		return view
@@ -87,8 +86,7 @@ func (m *Model) renderListView(l list.Model) string {
 		} else if i > 0 && i < h-1 {
 			indicator = "│"
 		}
-		sb.WriteString(line + indicator + "
-")
+		sb.WriteString(line + indicator + "\n")
 	}
 	return sb.String()
 }

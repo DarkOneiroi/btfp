@@ -49,8 +49,7 @@ func (m *Model) renderPlayerView() string {
 	}
 
 	if trackTitle == "" {
-		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render("No track playing.
-Press [tab] for Library.")
+		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render("No track playing.\nPress [tab] for Library.")
 	}
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Title)).Bold(true)
 	barW := 40
@@ -72,8 +71,9 @@ Press [tab] for Library.")
 		volStr = "VOL: MUTE"
 	}
 
-	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(status.Elapsed), formatDuration(trackLength)), volStr, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "
-[h] Toggle Help")
+	ttsInfo := fmt.Sprintf("TTS: %s | Voice: %d", strings.ToUpper(m.cfg.TTSLanguage), int(m.cfg.TTSSpeed))
+
+	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(status.Elapsed), formatDuration(trackLength)), volStr, ttsInfo, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "\n[h] Toggle Help")
 	return lipgloss.NewStyle().Width(80).Height(20).Align(lipgloss.Center, lipgloss.Center).Render(ui)
 }
 
@@ -92,12 +92,9 @@ func (m *Model) renderRightPanel() string {
 	}
 
 	if songPath == "" {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render("
-
-   (No Selection)")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render("\n\n   (No Selection)")
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("
-QUEUE: %d tracks", len(m.playlist))))
+	return lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("\nQUEUE: %d tracks", len(m.playlist))))
 }
 
 func (m *Model) renderArt(path string) string {
@@ -122,15 +119,10 @@ func (m *Model) renderArt(path string) string {
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("COVER ART")
 	if artPath == "" {
-		return fmt.Sprintf("
-%s
-
-   (No Art)", title)
+		return fmt.Sprintf("\n%s\n\n   (No Art)", title)
 	}
 
-	art := fmt.Sprintf("
-%s
-%s", title, utils.ImageToASCII(artPath, m.width/5))
+	art := fmt.Sprintf("\n%s\n%s", title, utils.ImageToASCII(artPath, m.width/5))
 	m.artCache[dir] = art
 	return art
 }
@@ -146,16 +138,23 @@ func (m *Model) renderMetadata(path string) string {
 	}
 
 	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
-	if err != nil {
-		return ""
+	if err == nil {
+		defer func() { _ = tag.Close() }()
 	}
-	defer func() { _ = tag.Close() }()
 
-	artist := tag.GetTextFrame("TPE1").Text
-	album := tag.GetTextFrame("TALB").Text
-	title := tag.GetTextFrame("TIT2").Text
-	genre := tag.GetTextFrame("TCON").Text
-	year := tag.GetTextFrame("TYER").Text
+	artist := "Unknown"
+	album := "Unknown"
+	title := filepath.Base(path)
+	genre := "Unknown"
+	year := "Unknown"
+
+	if tag != nil {
+		artist = tag.GetTextFrame("TPE1").Text
+		album = tag.GetTextFrame("TALB").Text
+		title = tag.GetTextFrame("TIT2").Text
+		genre = tag.GetTextFrame("TCON").Text
+		year = tag.GetTextFrame("TYER").Text
+	}
 
 	accent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent))
 	lyricsStatus := "Missing"
@@ -163,14 +162,7 @@ func (m *Model) renderMetadata(path string) string {
 		lyricsStatus = "Available"
 	}
 
-	meta := fmt.Sprintf("
-%s
- Artist: %s
- Album:  %s
- Title:  %s
- Genre:  %s
- Year:   %s
- Lyrics: %s",
+	meta := fmt.Sprintf("\n%s\n Artist: %s\n Album:  %s\n Title:  %s\n Genre:  %s\n Year:   %s\n Lyrics: %s",
 		accent.Render("METADATA"), artist, album, title, genre, year, lyricsStatus)
 
 	m.metadataCache[path] = meta
@@ -181,9 +173,7 @@ func (m *Model) renderTree() string {
 	home, _ := os.UserHomeDir()
 	musicDir := filepath.Join(home, "Music")
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("FOLDER TREE") + "
-
-")
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("FOLDER TREE") + "\n\n")
 	rel, _ := filepath.Rel(musicDir, m.currentDir)
 	parts := strings.Split(rel, string(filepath.Separator))
 	curPath := musicDir
@@ -205,8 +195,7 @@ func (m *Model) renderTree() string {
 		if cnt > 0 {
 			line += lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(fmt.Sprintf(" (%d)", cnt))
 		}
-		sb.WriteString(line + "
-")
+		sb.WriteString(line + "\n")
 		if p != "Music" {
 			curPath = filepath.Join(curPath, p)
 		}
@@ -237,6 +226,8 @@ func (m *Model) renderLegend() string {
 			{"[+/-]", "Volume"},
 			{"[m]", "Mute"},
 			{"[v]", "BG Mode"},
+			{"[t]", "TTS Lang"},
+			{"[s]", "TTS Voice"},
 		}
 	case viewViz:
 		keys = [][]string{
@@ -283,8 +274,7 @@ func (m *Model) renderKaraoke() string {
 	}
 
 	for i := 0; i < boxBottom+1; i++ {
-		sb.WriteString("
-")
+		sb.WriteString("\n")
 	}
 
 	if activeIdx == -1 {
@@ -300,11 +290,9 @@ func (m *Model) renderKaraoke() string {
 			} else {
 				style = style.Foreground(lipgloss.Color(m.theme.Subtext))
 			}
-			sb.WriteString(style.Render(m.currentLyrics[idx].text) + "
-")
+			sb.WriteString(style.Render(m.currentLyrics[idx].text) + "\n")
 		} else {
-			sb.WriteString("
-")
+			sb.WriteString("\n")
 		}
 	}
 	return sb.String()
@@ -358,11 +346,8 @@ func (m *Model) downloadArtCmd(dir string) tea.Cmd {
 }
 
 func (m *Model) overlayUI(bg, fg string) string {
-	bgLines := strings.Split(strings.TrimSuffix(bg, "
-"), "
-")
-	fgLines := strings.Split(fg, "
-")
+	bgLines := strings.Split(strings.TrimSuffix(bg, "\n"), "\n")
+	fgLines := strings.Split(fg, "\n")
 	fgW, fgH := 0, len(fgLines)
 	for _, l := range fgLines {
 		if w := lipgloss.Width(l); w > fgW {
@@ -393,8 +378,7 @@ func (m *Model) overlayUI(bg, fg string) string {
 			res.WriteString(bgL)
 		}
 		if y < m.height-1 {
-			res.WriteString("
-")
+			res.WriteString("\n")
 		}
 	}
 	return res.String()
@@ -407,7 +391,7 @@ func sliceANSI(s string, start, end int) string {
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
-		if r == '' {
+		if r == '\033' {
 			inEsc = true
 			res.WriteRune(r)
 			continue

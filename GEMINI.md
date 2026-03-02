@@ -21,7 +21,29 @@
 *   **Testing**: Maintain the integration tests in `tests/` and unit tests in component directories. Run `go test ./...` before any commit.
 *   **Visual Aesthetics**: Keep the visualization logic in `visualizations/renderer.go` performant. Avoid heavy allocations in the `GeneratePattern` or `Render` loops.
 
-## Tooling
+## Infrastructure
 
 *   Use `go mod tidy` after adding dependencies.
 *   Ensure `ffmpeg` is available on the system for universal audio support.
+
+## Audiobook Support (TTS)
+
+BTFP supports reading `.txt` files as audiobooks using **Sherpa-ONNX**.
+
+### Model Setup
+
+Due to size and licensing, models must be manually placed in `~/.config/btfp/models/`.
+
+#### 1. English (VCTK Multi-speaker)
+*   **Location**: `~/.config/btfp/models/en/`
+*   **Files**: `model.onnx`, `tokens.txt`, `lexicon.txt`
+*   **Source**: [csukuangfj/sherpa-onnx-vits-en-vctk](https://huggingface.co/csukuangfj/sherpa-onnx-vits-en-vctk)
+
+#### 2. Czech (Jirka)
+*   **Location**: `~/.config/btfp/models/cs/`
+*   **Files**: `model.onnx`, `tokens.txt`, `lexicon.txt`
+*   **Source**: [csukuangfj/sherpa-onnx-vits-cs-cz-jirka](https://huggingface.co/csukuangfj/sherpa-onnx-vits-cs-cz-jirka)
+
+### TUI Controls
+*   `[t]`: Cycle TTS Language (English <-> Czech)
+*   `[s]`: Cycle TTS Voice / Speaker ID

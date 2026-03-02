@@ -41,6 +41,10 @@ const (
 	CmdPlayTrack
 	// CmdQuit terminates the server and all clients
 	CmdQuit
+	// CmdTTSLanguage changes the TTS language ("en", "cs")
+	CmdTTSLanguage
+	// CmdTTSSpeaker changes the TTS speaker ID
+	CmdTTSSpeaker
 )
 
 // Command represents a message sent from client to server
@@ -68,6 +72,10 @@ type PlayerState struct {
 	PlayingIdx    int
 	ShouldQuit    bool
 	ActiveClients int
+
+	// TTS State
+	TTSLanguage string
+	TTSSpeaker  int
 }
 
 func init() {
@@ -75,6 +83,8 @@ func init() {
 	gob.Register(time.Duration(0))
 	gob.Register(0)
 	gob.Register(player.Track{})
+	gob.Register(TrackInfo{})
+	gob.Register([]TrackInfo{})
 }
 
 // SendCommand sends a command over the given connection

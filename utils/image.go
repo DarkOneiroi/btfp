@@ -63,8 +63,7 @@ func ImageToASCII(path string, width int) string {
 			// ▀ -> Half block
 			sb.WriteString(fmt.Sprintf("[38;2;%d;%d;%dm[48;2;%d;%d;%dm▀[0m", r1, g1, b1, r2, g2, b2))
 		}
-		sb.WriteString("
-")
+		sb.WriteString("\n")
 	}
 
 	return sb.String()

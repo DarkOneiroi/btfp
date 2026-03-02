@@ -88,8 +88,7 @@ func startTUI(view string, conn net.Conn) {
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v
-", err)
+		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -160,8 +159,7 @@ func sendRemote(cmd string) {
 	case "mute":
 		c = ipc.Command{Type: ipc.CmdMute}
 	default:
-		fmt.Printf("Unknown command: %s
-", cmd)
+		fmt.Printf("Unknown command: %s\n", cmd)
 		return
 	}
 	_ = enc.Encode(c)

@@ -48,8 +48,7 @@ func TestLayoutOverflow(t *testing.T) {
 	}
 
 	// Basic height check: the output should be contained within terminal height
-	lines := strings.Count(view, "
-")
+	lines := strings.Count(view, "\n")
 	if lines > 25 {
 		t.Errorf("View has too many lines: %d, might overflow terminal", lines)
 	}

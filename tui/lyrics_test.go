@@ -22,9 +22,8 @@ func TestParseLyrics(t *testing.T) {
 		expectSynced bool
 	}{
 		{
-			name: "Synced lyrics",
-			content: `[00:01.00] First line
-[00:02.50] Second line`,
+			name:    "Synced lyrics",
+			content: "[00:01.00] First line\n[00:02.50] Second line",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "First line"},
 				{time: 2500 * time.Millisecond, text: "Second line"},
@@ -32,10 +31,8 @@ func TestParseLyrics(t *testing.T) {
 			expectSynced: true,
 		},
 		{
-			name: "Synced lyrics with tags",
-			content: `[ti:Test]
-[00:01.00] First line
-[00:02.00] Second line`,
+			name:    "Synced lyrics with tags",
+			content: "[ti:Test]\n[00:01.00] First line\n[00:02.00] Second line",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "First line"},
 				{time: 2 * time.Second, text: "Second line"},
@@ -43,9 +40,8 @@ func TestParseLyrics(t *testing.T) {
 			expectSynced: true,
 		},
 		{
-			name: "Plain lyrics",
-			content: `First line
-Second line`,
+			name:    "Plain lyrics",
+			content: "First line\nSecond line",
 			expected: []lrcLine{
 				{time: 0 * time.Second, text: "First line"},
 				{time: 5 * time.Second, text: "Second line"},
@@ -53,10 +49,8 @@ Second line`,
 			expectSynced: false,
 		},
 		{
-			name: "Mixed (should include non-timestamped lines with previous timestamp)",
-			content: `[00:01.00] First line
-Random line
-[00:02.00] Second line`,
+			name:    "Mixed (should include non-timestamped lines with previous timestamp)",
+			content: "[00:01.00] First line\nRandom line\n[00:02.00] Second line",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "First line"},
 				{time: 1 * time.Second, text: "Random line"},
@@ -66,8 +60,7 @@ Random line
 		},
 		{
 			name:    "Lyrics with different line endings",
-			content: "[00:01.00] Line 1
-[00:02.00] Line 2[00:03.00] Line 3",
+			content: "[00:01.00] Line 1\r\n[00:02.00] Line 2\r[00:03.00] Line 3",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "Line 1"},
 				{time: 2 * time.Second, text: "Line 2"},

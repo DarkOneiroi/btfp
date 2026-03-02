@@ -6,6 +6,7 @@
 package player
 
 import (
+	"btfp/config"
 	"fmt"
 	"math"
 	"os"
@@ -51,6 +52,7 @@ type Player interface {
 	Update()
 	GetStatus() Status
 	SetStatus(s Status)
+	SetTTSParams(lang string, speaker int)
 }
 
 // MusicPlayer handles the audio playback lifecycle
@@ -61,14 +63,16 @@ type MusicPlayer struct {
 	volumeCtrl *effects.Volume
 	streamer   beep.StreamSeekCloser
 	sampleRate beep.SampleRate
+	cfg        config.Config
 }
 
 // NewMusicPlayer creates and initializes a new music player instance
-func NewMusicPlayer() *MusicPlayer {
+func NewMusicPlayer(cfg config.Config) *MusicPlayer {
 	return &MusicPlayer{
 		status: Status{
 			Volume: 1.0,
 		},
+		cfg: cfg,
 	}
 }
 
@@ -117,13 +121,15 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 		if err == nil {
 			streamer, format, err = vorbis.Decode(f)
 		}
+	case ".txt":
+		streamer, format, err = p.playTextAsSpeech(t.Path)
 	default:
 		// Fallback to ffmpeg for universal compatibility (M4A, AAC, etc.)
 		streamer, format, err = p.decodeWithFFmpeg(t.Path)
 	}
 
 	// Recovery Strategy: If native decoding fails, try FFmpeg as a last resort
-	if err != nil {
+	if err != nil && ext != ".txt" {
 		if f != nil {
 			_ = f.Close()
 		}
@@ -249,4 +255,31 @@ func (p *MusicPlayer) Update() {
 			p.status.IsPlaying = false
 		}
 	}
+}
+
+// SetTTSParams updates the TTS settings for the player
+func (p *MusicPlayer) SetTTSParams(lang string, speaker int) {
+	p.cfg.TTSLanguage = lang
+	p.cfg.TTSVoice = fmt.Sprintf("%d", speaker) // Using speaker ID as voice for now
+}
+
+// playTextAsSpeech reads a text file and converts it to speech using the TTS engine
+func (p *MusicPlayer) playTextAsSpeech(path string) (beep.StreamSeekCloser, beep.Format, error) {
+	if !p.cfg.TTSEnabled {
+		return nil, beep.Format{}, fmt.Errorf("TTS is disabled in config")
+	}
+
+	content, err := ReadTextFile(path)
+	if err != nil {
+		return nil, beep.Format{}, fmt.Errorf("failed to read text file: %w", err)
+	}
+
+	model, lexicon, tokens := GetTTSModelPaths(p.cfg.TTSLanguage)
+	tts, err := NewTTSPlayer(model, lexicon, tokens)
+	if err != nil {
+		return nil, beep.Format{}, fmt.Errorf("failed to initialize TTS engine: %w", err)
+	}
+	defer tts.Close()
+
+	return tts.GenerateAudio(content, 0) // TODO: Support selectable speaker IDs
 }

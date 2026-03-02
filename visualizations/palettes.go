@@ -55,7 +55,7 @@ func GetCharacters(p PaletteType) []rune {
 	case PaletteSimple:
 		return []rune(" .oO@")
 	case PaletteDetailed:
-		return []rune(" .'`^,:;Il!i><~+_-?][}{1)(|\/tfjrxnuvczMWQH8JPK6A4d25gbp9qwmkLO0UYXZE")
+		return []rune(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczMWQH8JPK6A4d25gbp9qwmkLO0UYXZE")
 	case PaletteBinary:
 		return []rune(" 01")
 	case PaletteHex:
@@ -71,7 +71,7 @@ func GetCharacters(p PaletteType) []rune {
 	case PaletteGradient:
 		return []rune(" .:-=+*#%@")
 	case PaletteMatrix:
-		return []rune(" 0123456789$+-*/=%\"'#&_(),.;:?!\|{}<>[]^~")
+		return []rune(" 0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~")
 	case PaletteMinimal:
 		return []rune(" #")
 	case PaletteStandard:

@@ -6,12 +6,13 @@
 package player
 
 import (
+	"btfp/config"
 	"testing"
 	"time"
 )
 
 func TestMusicPlayerInitialization(t *testing.T) {
-	p := NewMusicPlayer()
+	p := NewMusicPlayer(config.Config{})
 	status := p.GetStatus()
 	if status.Volume != 1.0 {
 		t.Errorf("Expected volume 1.0, got %f", status.Volume)
@@ -22,7 +23,7 @@ func TestMusicPlayerInitialization(t *testing.T) {
 }
 
 func TestVolumeControls(t *testing.T) {
-	p := NewMusicPlayer()
+	p := NewMusicPlayer(config.Config{})
 
 	p.SetVolume(0.5)
 	status := p.GetStatus()

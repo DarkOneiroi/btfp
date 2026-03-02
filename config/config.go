@@ -26,6 +26,13 @@ type Config struct {
 	UpdateMetadata     bool   `toml:"update_metadata"`
 	ImagePath          string `toml:"image_path"`
 	Theme              string `toml:"theme"`
+
+	// TTS Settings
+	TTSEnabled  bool    `toml:"tts_enabled"`
+	TTSLanguage string  `toml:"tts_language"` // "en" or "cs"
+	TTSVoice    string  `toml:"tts_voice"`    // Voice name or model path
+	TTSSpeed    float64 `toml:"tts_speed"`
+	TTSPitch    float64 `toml:"tts_pitch"`
 }
 
 // Theme defines the ANSI color codes for UI components
@@ -55,6 +62,11 @@ func LoadConfig() (Config, Theme) {
 		AutoDownloadArt:    true,
 		UpdateMetadata:     true,
 		Theme:              "default",
+		TTSEnabled:         true,
+		TTSLanguage:        "en",
+		TTSVoice:           "default",
+		TTSSpeed:           1.0,
+		TTSPitch:           1.0,
 	}
 
 	_ = os.MkdirAll(configDir, 0755)

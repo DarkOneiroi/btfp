@@ -23,39 +23,51 @@ func NewMockPlayer() *MockPlayer {
 	}
 }
 
+// PlayTrack is a mock implementation
 func (m *MockPlayer) PlayTrack(t *Track) error {
 	m.status.CurrentTrack = t
 	m.status.IsPlaying = true
-	m.status.IsDone = false
 	return nil
 }
 
+// TogglePause is a mock implementation
 func (m *MockPlayer) TogglePause() {
 	m.status.IsPlaying = !m.status.IsPlaying
 }
 
+// SetVolume is a mock implementation
 func (m *MockPlayer) SetVolume(v float64) {
 	m.status.Volume = v
 }
 
+// ToggleMute is a mock implementation
 func (m *MockPlayer) ToggleMute() {
 	m.status.IsMuted = !m.status.IsMuted
 }
 
+// Seek is a mock implementation
 func (m *MockPlayer) Seek(d time.Duration) {
 	m.status.Elapsed += d
 }
 
+// Update is a mock implementation
 func (m *MockPlayer) Update() {
 	if m.status.IsPlaying {
-		m.status.Elapsed += time.Second
+		m.status.Elapsed += time.Second / 10
 	}
 }
 
+// GetStatus is a mock implementation
 func (m *MockPlayer) GetStatus() Status {
 	return m.status
 }
 
+// SetStatus is a mock implementation
 func (m *MockPlayer) SetStatus(s Status) {
 	m.status = s
+}
+
+// SetTTSParams is a mock implementation
+func (m *MockPlayer) SetTTSParams(lang string, speaker int) {
+	// No-op for mock
 }

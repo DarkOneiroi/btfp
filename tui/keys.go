@@ -79,6 +79,12 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 
 	case "b":
 		m.prevTrack(&cmds)
+
+	case "t":
+		m.toggleTTSLanguage()
+
+	case "s":
+		m.cycleTTSSpeaker()
 	}
 
 	if len(cmds) > 0 {
@@ -237,5 +243,24 @@ func (m *Model) prevTrack(cmds *[]tea.Cmd) {
 		if m.playingIdx >= 0 && m.playingIdx < len(m.playlist) {
 			*cmds = append(*cmds, m.syncMetadataAndArt(m.playlist[m.playingIdx].Path))
 		}
+	}
+}
+
+func (m *Model) toggleTTSLanguage() {
+	lang := "en"
+	if m.cfg.TTSLanguage == "en" {
+		lang = "cs"
+	}
+	m.sendCommand(ipc.Command{Type: ipc.CmdTTSLanguage, Payload: lang})
+	if m.conn == nil {
+		m.player.SetTTSParams(lang, int(m.cfg.TTSSpeed))
+	}
+}
+
+func (m *Model) cycleTTSSpeaker() {
+	speaker := (int(m.cfg.TTSSpeed) + 1) % 2 // Assume 2 speakers for now
+	m.sendCommand(ipc.Command{Type: ipc.CmdTTSSpeaker, Payload: speaker})
+	if m.conn == nil {
+		m.player.SetTTSParams(m.cfg.TTSLanguage, speaker)
 	}
 }

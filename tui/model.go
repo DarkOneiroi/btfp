@@ -161,7 +161,7 @@ func NewModel(initialView string) *Model {
 		colorMode:      cfg.ColorMode,
 		palette:        cfg.Palette,
 		showLegend:     cfg.ShowLegend,
-		player:         player.NewMusicPlayer(),
+		player:         player.NewMusicPlayer(cfg),
 		playingIdx:     -1,
 		cfg:            cfg,
 		theme:          theme,

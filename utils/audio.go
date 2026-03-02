@@ -21,6 +21,7 @@ var SupportedExtensions = []string{
 	".wma",
 	".aiff",
 	".opus",
+	".txt",
 }
 
 // IsSupportedAudioFile returns true if the file extension is in the supported list

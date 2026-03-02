@@ -265,8 +265,7 @@ func (f *Frame) Render(streamMode bool) string {
 			fmt.Fprintf(&sb, "[38;5;%dm%c[0m", color, char)
 		}
 		if y < f.Height-1 || streamMode {
-			sb.WriteString("
-")
+			sb.WriteString("\n")
 		}
 	}
 	return sb.String()

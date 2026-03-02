@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/gopxl/beep v1.4.1
+	github.com/k2-fsa/sherpa-onnx-go v1.12.27
 	github.com/mattn/go-runewidth v0.0.20
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 )
@@ -30,6 +31,9 @@ require (
 	github.com/icza/bitio v1.1.0 // indirect
 	github.com/jfreymuth/oggvorbis v1.0.5 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-linux v1.12.28 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-macos v1.12.28 // indirect
+	github.com/k2-fsa/sherpa-onnx-go-windows v1.12.28 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

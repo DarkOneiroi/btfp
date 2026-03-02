@@ -105,6 +105,9 @@ func (m *Model) handleServerState(msg serverStateMsg, cmds *[]tea.Cmd) {
 	m.player.SetStatus(currentStatus)
 	m.syncPlaylist()
 
+	m.cfg.TTSLanguage = msg.TTSLanguage
+	m.cfg.TTSSpeed = float64(msg.TTSSpeaker) // Temp mapping back
+
 	*cmds = append(*cmds, m.listenToServer())
 }
 

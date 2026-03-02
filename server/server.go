@@ -6,6 +6,7 @@
 package server
 
 import (
+	"btfp/config"
 	"btfp/ipc"
 	"btfp/player"
 	"encoding/gob"
@@ -40,6 +41,8 @@ type commandHandler func(*Server, interface{})
 func Start() {
 	_ = os.Remove(ipc.SocketPath)
 
+	cfg, _ := config.LoadConfig()
+
 	// Register types for interface{} encoding
 	gob.Register(time.Duration(0))
 	gob.Register(0)
@@ -48,14 +51,13 @@ func Start() {
 
 	listener, err := net.Listen("unix", ipc.SocketPath)
 	if err != nil {
-		fmt.Printf("Failed to start server: %v
-", err)
+		fmt.Printf("Failed to start server: %v\n", err)
 		return
 	}
 	defer func() { _ = listener.Close() }()
 
 	s := &Server{
-		player:     player.NewMusicPlayer(),
+		player:     player.NewMusicPlayer(cfg),
 		clients:    make(map[net.Conn]*Client),
 		playingIdx: -1,
 		listener:   listener,
@@ -163,6 +165,23 @@ func (s *Server) registerHandlers() {
 		ipc.CmdQuit: func(srv *Server, _ interface{}) {
 			srv.shouldQuit = true
 		},
+		ipc.CmdTTSLanguage: func(srv *Server, p interface{}) {
+			if lang, ok := p.(string); ok {
+				cfg, _ := config.LoadConfig()
+				cfg.TTSLanguage = lang
+				pitch := 0
+				if cfg.TTSPitch != 0 {
+					pitch = int(cfg.TTSPitch)
+				}
+				srv.player.SetTTSParams(lang, pitch) // Temp usage of SetTTSParams
+			}
+		},
+		ipc.CmdTTSSpeaker: func(srv *Server, p interface{}) {
+			if speaker, ok := p.(int); ok {
+				cfg, _ := config.LoadConfig()
+				srv.player.SetTTSParams(cfg.TTSLanguage, speaker)
+			}
+		},
 	}
 }
 
@@ -209,6 +228,8 @@ func (s *Server) broadcastState() {
 		playlist[i] = ipc.TrackInfo{Title: t.Title, Artist: t.Artist, Path: t.Path, Length: t.Length}
 	}
 
+	cfg, _ := config.LoadConfig() // Should ideally be cached or retrieved from player if player tracks it properly
+
 	state := ipc.PlayerState{
 		CurrentTrack:  current,
 		IsPlaying:     status.IsPlaying,
@@ -219,6 +240,8 @@ func (s *Server) broadcastState() {
 		PlayingIdx:    s.playingIdx,
 		ShouldQuit:    s.shouldQuit,
 		ActiveClients: len(s.clients),
+		TTSLanguage:   cfg.TTSLanguage,
+		TTSSpeaker:    int(cfg.TTSSpeed), // Using speed as speaker ID for now as temp hack
 	}
 
 	for _, c := range s.clients {

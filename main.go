@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package main
 
 import (
@@ -83,7 +88,8 @@ func startTUI(view string, conn net.Conn) {
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
+		fmt.Printf("Error: %v
+", err)
 		os.Exit(1)
 	}
 }
@@ -154,7 +160,8 @@ func sendRemote(cmd string) {
 	case "mute":
 		c = ipc.Command{Type: ipc.CmdMute}
 	default:
-		fmt.Printf("Unknown command: %s\n", cmd)
+		fmt.Printf("Unknown command: %s
+", cmd)
 		return
 	}
 	_ = enc.Encode(c)

@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tests
 
 import (
@@ -43,7 +48,8 @@ func TestLayoutOverflow(t *testing.T) {
 	}
 
 	// Basic height check: the output should be contained within terminal height
-	lines := strings.Count(view, "\n")
+	lines := strings.Count(view, "
+")
 	if lines > 25 {
 		t.Errorf("View has too many lines: %d, might overflow terminal", lines)
 	}

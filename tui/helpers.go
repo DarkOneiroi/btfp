@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -194,9 +199,13 @@ func (m *Model) syncMetadataAndArt(songPath string) tea.Cmd {
 }
 
 func (m *Model) parseLyrics(content string) ([]lrcLine, bool) {
-	c := strings.ReplaceAll(content, "\r\n", "\n")
-	c = strings.ReplaceAll(c, "\r", "\n")
-	lines := strings.Split(c, "\n")
+	c := strings.ReplaceAll(content, "
+", "
+")
+	c = strings.ReplaceAll(c, "", "
+")
+	lines := strings.Split(c, "
+")
 
 	var res []lrcLine
 	re := regexp.MustCompile(`\[(\d+):(\d+(?:\.\d+)?)\](.*)`)
@@ -315,8 +324,8 @@ func cleanString(s string) string {
 	s = reNum.ReplaceAllString(s, "")
 	reSuffix := regexp.MustCompile(`[\(\[].*?[\)\]]`)
 	s = reSuffix.ReplaceAllString(s, "")
-	reNoise := regexp.MustCompile(`\b(official|video|audio|lyrics|hd|4k|remastered|remaster|edit|radio|live)\b`)
+	reNoise := regexp.MustCompile(`(official|video|audio|lyrics|hd|4k|remastered|remaster|edit|radio|live)`)
 	s = reNoise.ReplaceAllString(s, "")
-	s = regexp.MustCompile(`[ \t]+`).ReplaceAllString(s, " ")
+	s = regexp.MustCompile(`[ 	]+`).ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)
 }

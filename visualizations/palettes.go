@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package visualizations
 
 // PaletteType defines the set of characters used for rendering
@@ -50,7 +55,7 @@ func GetCharacters(p PaletteType) []rune {
 	case PaletteSimple:
 		return []rune(" .oO@")
 	case PaletteDetailed:
-		return []rune(" .'`^,:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczMWQH8JPK6A4d25gbp9qwmkLO0UYXZE")
+		return []rune(" .'`^,:;Il!i><~+_-?][}{1)(|\/tfjrxnuvczMWQH8JPK6A4d25gbp9qwmkLO0UYXZE")
 	case PaletteBinary:
 		return []rune(" 01")
 	case PaletteHex:
@@ -66,7 +71,7 @@ func GetCharacters(p PaletteType) []rune {
 	case PaletteGradient:
 		return []rune(" .:-=+*#%@")
 	case PaletteMatrix:
-		return []rune(" 0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~")
+		return []rune(" 0123456789$+-*/=%\"'#&_(),.;:?!\|{}<>[]^~")
 	case PaletteMinimal:
 		return []rune(" #")
 	case PaletteStandard:

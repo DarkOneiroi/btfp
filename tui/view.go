@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -56,7 +61,8 @@ func (m *Model) getBackground() string {
 
 func (m *Model) renderListView(l list.Model) string {
 	view := l.View()
-	lines := strings.Split(view, "\n")
+	lines := strings.Split(view, "
+")
 	h := l.Height()
 	if h <= 0 {
 		return view
@@ -81,7 +87,8 @@ func (m *Model) renderListView(l list.Model) string {
 		} else if i > 0 && i < h-1 {
 			indicator = "│"
 		}
-		sb.WriteString(line + indicator + "\n")
+		sb.WriteString(line + indicator + "
+")
 	}
 	return sb.String()
 }

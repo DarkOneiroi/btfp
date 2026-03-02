@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -44,7 +49,8 @@ func (m *Model) renderPlayerView() string {
 	}
 
 	if trackTitle == "" {
-		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render("No track playing.\nPress [tab] for Library.")
+		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render("No track playing.
+Press [tab] for Library.")
 	}
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Title)).Bold(true)
 	barW := 40
@@ -66,7 +72,8 @@ func (m *Model) renderPlayerView() string {
 		volStr = "VOL: MUTE"
 	}
 
-	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(status.Elapsed), formatDuration(trackLength)), volStr, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "\n[h] Toggle Help")
+	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(status.Elapsed), formatDuration(trackLength)), volStr, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "
+[h] Toggle Help")
 	return lipgloss.NewStyle().Width(80).Height(20).Align(lipgloss.Center, lipgloss.Center).Render(ui)
 }
 
@@ -85,9 +92,12 @@ func (m *Model) renderRightPanel() string {
 	}
 
 	if songPath == "" {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render("\n\n   (No Selection)")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render("
+
+   (No Selection)")
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("\nQUEUE: %d tracks", len(m.playlist))))
+	return lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("
+QUEUE: %d tracks", len(m.playlist))))
 }
 
 func (m *Model) renderArt(path string) string {
@@ -112,10 +122,15 @@ func (m *Model) renderArt(path string) string {
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("COVER ART")
 	if artPath == "" {
-		return fmt.Sprintf("\n%s\n\n   (No Art)", title)
+		return fmt.Sprintf("
+%s
+
+   (No Art)", title)
 	}
 
-	art := fmt.Sprintf("\n%s\n%s", title, utils.ImageToASCII(artPath, m.width/5))
+	art := fmt.Sprintf("
+%s
+%s", title, utils.ImageToASCII(artPath, m.width/5))
 	m.artCache[dir] = art
 	return art
 }
@@ -148,7 +163,14 @@ func (m *Model) renderMetadata(path string) string {
 		lyricsStatus = "Available"
 	}
 
-	meta := fmt.Sprintf("\n%s\n Artist: %s\n Album:  %s\n Title:  %s\n Genre:  %s\n Year:   %s\n Lyrics: %s",
+	meta := fmt.Sprintf("
+%s
+ Artist: %s
+ Album:  %s
+ Title:  %s
+ Genre:  %s
+ Year:   %s
+ Lyrics: %s",
 		accent.Render("METADATA"), artist, album, title, genre, year, lyricsStatus)
 
 	m.metadataCache[path] = meta
@@ -159,7 +181,9 @@ func (m *Model) renderTree() string {
 	home, _ := os.UserHomeDir()
 	musicDir := filepath.Join(home, "Music")
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("FOLDER TREE") + "\n\n")
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("FOLDER TREE") + "
+
+")
 	rel, _ := filepath.Rel(musicDir, m.currentDir)
 	parts := strings.Split(rel, string(filepath.Separator))
 	curPath := musicDir
@@ -181,7 +205,8 @@ func (m *Model) renderTree() string {
 		if cnt > 0 {
 			line += lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(fmt.Sprintf(" (%d)", cnt))
 		}
-		sb.WriteString(line + "\n")
+		sb.WriteString(line + "
+")
 		if p != "Music" {
 			curPath = filepath.Join(curPath, p)
 		}
@@ -258,7 +283,8 @@ func (m *Model) renderKaraoke() string {
 	}
 
 	for i := 0; i < boxBottom+1; i++ {
-		sb.WriteString("\n")
+		sb.WriteString("
+")
 	}
 
 	if activeIdx == -1 {
@@ -274,9 +300,11 @@ func (m *Model) renderKaraoke() string {
 			} else {
 				style = style.Foreground(lipgloss.Color(m.theme.Subtext))
 			}
-			sb.WriteString(style.Render(m.currentLyrics[idx].text) + "\n")
+			sb.WriteString(style.Render(m.currentLyrics[idx].text) + "
+")
 		} else {
-			sb.WriteString("\n")
+			sb.WriteString("
+")
 		}
 	}
 	return sb.String()
@@ -330,8 +358,11 @@ func (m *Model) downloadArtCmd(dir string) tea.Cmd {
 }
 
 func (m *Model) overlayUI(bg, fg string) string {
-	bgLines := strings.Split(strings.TrimSuffix(bg, "\n"), "\n")
-	fgLines := strings.Split(fg, "\n")
+	bgLines := strings.Split(strings.TrimSuffix(bg, "
+"), "
+")
+	fgLines := strings.Split(fg, "
+")
 	fgW, fgH := 0, len(fgLines)
 	for _, l := range fgLines {
 		if w := lipgloss.Width(l); w > fgW {
@@ -362,7 +393,8 @@ func (m *Model) overlayUI(bg, fg string) string {
 			res.WriteString(bgL)
 		}
 		if y < m.height-1 {
-			res.WriteString("\n")
+			res.WriteString("
+")
 		}
 	}
 	return res.String()
@@ -375,7 +407,7 @@ func sliceANSI(s string, start, end int) string {
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
-		if r == '\x1b' {
+		if r == '' {
 			inEsc = true
 			res.WriteRune(r)
 			continue

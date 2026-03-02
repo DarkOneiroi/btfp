@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package visualizations
 
 import (
@@ -257,10 +262,11 @@ func (f *Frame) Render(streamMode bool) string {
 			}
 			char := chars[charIdx]
 			color := f.getColor(val, x, y)
-			fmt.Fprintf(&sb, "\x1b[38;5;%dm%c\x1b[0m", color, char)
+			fmt.Fprintf(&sb, "[38;5;%dm%c[0m", color, char)
 		}
 		if y < f.Height-1 || streamMode {
-			sb.WriteString("\n")
+			sb.WriteString("
+")
 		}
 	}
 	return sb.String()

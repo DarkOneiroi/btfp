@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package server
 
 import (
@@ -43,7 +48,8 @@ func Start() {
 
 	listener, err := net.Listen("unix", ipc.SocketPath)
 	if err != nil {
-		fmt.Printf("Failed to start server: %v\n", err)
+		fmt.Printf("Failed to start server: %v
+", err)
 		return
 	}
 	defer func() { _ = listener.Close() }()

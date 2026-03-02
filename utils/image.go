@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package utils
 
 import (
@@ -53,12 +58,13 @@ func ImageToASCII(path string, width int) string {
 			r1, g1, b1 := uint8(tr>>8), uint8(tg>>8), uint8(tb>>8)
 			r2, g2, b2 := uint8(br>>8), uint8(bg>>8), uint8(bb>>8)
 
-			// \x1b[38;2;R;G;Bm -> Foreground (Top pixel)
-			// \x1b[48;2;R;G;Bm -> Background (Bottom pixel)
+			// [38;2;R;G;Bm -> Foreground (Top pixel)
+			// [48;2;R;G;Bm -> Background (Bottom pixel)
 			// ▀ -> Half block
-			sb.WriteString(fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀\x1b[0m", r1, g1, b1, r2, g2, b2))
+			sb.WriteString(fmt.Sprintf("[38;2;%d;%d;%dm[48;2;%d;%d;%dm▀[0m", r1, g1, b1, r2, g2, b2))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("
+")
 	}
 
 	return sb.String()

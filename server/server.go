@@ -19,14 +19,17 @@ type Client struct {
 
 // Server represents the main IPC server managing the player and clients
 type Server struct {
-	player     *player.MusicPlayer
+	player     player.Player
 	playlist   []player.Track
 	playingIdx int
 	clients    map[net.Conn]*Client
 	mu         sync.Mutex
 	shouldQuit bool
 	listener   net.Listener
+	handlers   map[ipc.CommandType]commandHandler
 }
+
+type commandHandler func(*Server, interface{})
 
 // Start initializes and runs the IPC server
 func Start() {
@@ -51,13 +54,15 @@ func Start() {
 		playingIdx: -1,
 		listener:   listener,
 	}
+	s.registerHandlers()
 
 	// Server Update Loop
 	go func() {
 		for range time.Tick(time.Second / 10) {
 			s.player.Update()
 			s.mu.Lock()
-			if s.player.IsDone && len(s.playlist) > 0 {
+			status := s.player.GetStatus()
+			if status.IsDone && len(s.playlist) > 0 {
 				s.playingIdx = (s.playingIdx + 1) % len(s.playlist)
 				_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
 			}
@@ -95,6 +100,66 @@ func Start() {
 	}
 }
 
+func (s *Server) registerHandlers() {
+	s.handlers = map[ipc.CommandType]commandHandler{
+		ipc.CmdPlay: func(srv *Server, p interface{}) {
+			if idx, ok := p.(int); ok && idx >= 0 && idx < len(srv.playlist) {
+				srv.playingIdx = idx
+				_ = srv.player.PlayTrack(&srv.playlist[srv.playingIdx])
+			} else {
+				srv.player.TogglePause()
+			}
+		},
+		ipc.CmdPause: func(srv *Server, _ interface{}) {
+			srv.player.TogglePause()
+		},
+		ipc.CmdNext: func(srv *Server, _ interface{}) {
+			if len(srv.playlist) > 0 {
+				srv.playingIdx = (srv.playingIdx + 1) % len(srv.playlist)
+				_ = srv.player.PlayTrack(&srv.playlist[srv.playingIdx])
+			}
+		},
+		ipc.CmdPrev: func(srv *Server, _ interface{}) {
+			if len(srv.playlist) > 0 {
+				srv.playingIdx = (srv.playingIdx - 1 + len(srv.playlist)) % len(srv.playlist)
+				_ = srv.player.PlayTrack(&srv.playlist[srv.playingIdx])
+			}
+		},
+		ipc.CmdAddTrack: func(srv *Server, p interface{}) {
+			if t, ok := p.(player.Track); ok {
+				srv.playlist = append(srv.playlist, t)
+				if srv.playingIdx == -1 {
+					srv.playingIdx = 0
+					_ = srv.player.PlayTrack(&srv.playlist[0])
+				}
+			}
+		},
+		ipc.CmdPlayTrack: func(srv *Server, p interface{}) {
+			if t, ok := p.(player.Track); ok {
+				srv.playlist = append(srv.playlist, t)
+				srv.playingIdx = len(srv.playlist) - 1
+				_ = srv.player.PlayTrack(&srv.playlist[srv.playingIdx])
+			}
+		},
+		ipc.CmdVolume: func(srv *Server, p interface{}) {
+			if v, ok := p.(float64); ok {
+				srv.player.SetVolume(v)
+			}
+		},
+		ipc.CmdSeek: func(srv *Server, p interface{}) {
+			if d, ok := p.(time.Duration); ok {
+				srv.player.Seek(d)
+			}
+		},
+		ipc.CmdMute: func(srv *Server, _ interface{}) {
+			srv.player.ToggleMute()
+		},
+		ipc.CmdQuit: func(srv *Server, _ interface{}) {
+			srv.shouldQuit = true
+		},
+	}
+}
+
 func (s *Server) handleClient(c *Client) {
 	defer func() {
 		s.mu.Lock()
@@ -110,59 +175,11 @@ func (s *Server) handleClient(c *Client) {
 			return
 		}
 		s.mu.Lock()
-		s.processCommand(cmd)
+		if handler, ok := s.handlers[cmd.Type]; ok {
+			handler(s, cmd.Payload)
+		}
 		s.mu.Unlock()
 		s.broadcastState()
-	}
-}
-
-func (s *Server) processCommand(cmd ipc.Command) {
-	switch cmd.Type {
-	case ipc.CmdPlay:
-		if p, ok := cmd.Payload.(int); ok && p >= 0 && p < len(s.playlist) {
-			s.playingIdx = p
-			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
-		} else {
-			s.player.TogglePause()
-		}
-	case ipc.CmdPause:
-		s.player.TogglePause()
-	case ipc.CmdNext:
-		if len(s.playlist) > 0 {
-			s.playingIdx = (s.playingIdx + 1) % len(s.playlist)
-			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
-		}
-	case ipc.CmdPrev:
-		if len(s.playlist) > 0 {
-			s.playingIdx = (s.playingIdx - 1 + len(s.playlist)) % len(s.playlist)
-			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
-		}
-	case ipc.CmdAddTrack:
-		if t, ok := cmd.Payload.(player.Track); ok {
-			s.playlist = append(s.playlist, t)
-			if s.playingIdx == -1 {
-				s.playingIdx = 0
-				_ = s.player.PlayTrack(&s.playlist[0])
-			}
-		}
-	case ipc.CmdPlayTrack:
-		if t, ok := cmd.Payload.(player.Track); ok {
-			s.playlist = append(s.playlist, t)
-			s.playingIdx = len(s.playlist) - 1
-			_ = s.player.PlayTrack(&s.playlist[s.playingIdx])
-		}
-	case ipc.CmdVolume:
-		if v, ok := cmd.Payload.(float64); ok {
-			s.player.SetVolume(v)
-		}
-	case ipc.CmdSeek:
-		if d, ok := cmd.Payload.(time.Duration); ok {
-			s.player.Seek(d)
-		}
-	case ipc.CmdMute:
-		s.player.ToggleMute()
-	case ipc.CmdQuit:
-		s.shouldQuit = true
 	}
 }
 
@@ -170,13 +187,14 @@ func (s *Server) broadcastState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	status := s.player.GetStatus()
 	var current *ipc.TrackInfo
-	if s.player.CurrentTrack != nil {
+	if status.CurrentTrack != nil {
 		current = &ipc.TrackInfo{
-			Title:  s.player.CurrentTrack.Title,
-			Artist: s.player.CurrentTrack.Artist,
-			Path:   s.player.CurrentTrack.Path,
-			Length: s.player.CurrentTrack.Length,
+			Title:  status.CurrentTrack.Title,
+			Artist: status.CurrentTrack.Artist,
+			Path:   status.CurrentTrack.Path,
+			Length: status.CurrentTrack.Length,
 		}
 	}
 
@@ -187,10 +205,10 @@ func (s *Server) broadcastState() {
 
 	state := ipc.PlayerState{
 		CurrentTrack:  current,
-		IsPlaying:     s.player.IsPlaying,
-		IsMuted:       s.player.IsMuted,
-		Volume:        s.player.Volume,
-		Elapsed:       s.player.Elapsed,
+		IsPlaying:     status.IsPlaying,
+		IsMuted:       status.IsMuted,
+		Volume:        status.Volume,
+		Elapsed:       status.Elapsed,
 		Playlist:      playlist,
 		PlayingIdx:    s.playingIdx,
 		ShouldQuit:    s.shouldQuit,

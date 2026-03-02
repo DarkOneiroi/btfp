@@ -188,7 +188,7 @@ func (m *Model) handleVizKeys(key string) {
 }
 
 func (m *Model) adjustVolume(delta float64) {
-	vol := m.player.Volume + delta
+	vol := m.player.GetStatus().Volume + delta
 	if vol < 0 {
 		vol = 0
 	}

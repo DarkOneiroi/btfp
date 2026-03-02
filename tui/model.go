@@ -109,7 +109,7 @@ type Model struct {
 	LastResize time.Time
 
 	// Infrastructure
-	player *player.MusicPlayer
+	player player.Player
 	conn   net.Conn
 	enc    *gob.Encoder
 	dec    *gob.Decoder

@@ -35,11 +35,12 @@ func (m *Model) renderPlaylistView() string {
 }
 
 func (m *Model) renderPlayerView() string {
+	status := m.player.GetStatus()
 	var trackTitle string
 	var trackLength time.Duration
-	if m.player.CurrentTrack != nil {
-		trackTitle = m.player.CurrentTrack.Title
-		trackLength = m.player.CurrentTrack.Length
+	if status.CurrentTrack != nil {
+		trackTitle = status.CurrentTrack.Title
+		trackLength = status.CurrentTrack.Length
 	}
 
 	if trackTitle == "" {
@@ -49,23 +50,23 @@ func (m *Model) renderPlayerView() string {
 	barW := 40
 	pct := 0.0
 	if trackLength > 0 {
-		pct = float64(m.player.Elapsed) / float64(trackLength)
+		pct = float64(status.Elapsed) / float64(trackLength)
 	}
 	fill := int(float64(barW) * pct)
 	if fill > barW {
 		fill = barW
 	}
 	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(strings.Repeat("━", fill)) + lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render(strings.Repeat("━", barW-fill))
-	status := "PLAYING"
-	if !m.player.IsPlaying {
-		status = "PAUSED"
+	stateText := "PLAYING"
+	if !status.IsPlaying {
+		stateText = "PAUSED"
 	}
-	volStr := fmt.Sprintf("VOL: %d%%", int(m.player.Volume*100))
-	if m.player.IsMuted {
+	volStr := fmt.Sprintf("VOL: %d%%", int(status.Volume*100))
+	if status.IsMuted {
 		volStr = "VOL: MUTE"
 	}
 
-	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(m.player.Elapsed), formatDuration(trackLength)), volStr, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(status), "\n[h] Toggle Help")
+	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(status.Elapsed), formatDuration(trackLength)), volStr, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "\n[h] Toggle Help")
 	return lipgloss.NewStyle().Width(80).Height(20).Align(lipgloss.Center, lipgloss.Center).Render(ui)
 }
 
@@ -240,9 +241,10 @@ func (m *Model) renderKaraoke() string {
 		return ""
 	}
 
+	elapsed := m.player.GetStatus().Elapsed
 	activeIdx := -1
 	for i, line := range m.currentLyrics {
-		if m.player.Elapsed >= line.time {
+		if elapsed >= line.time {
 			activeIdx = i
 		} else {
 			break

@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package player
 
 import (
@@ -7,10 +12,11 @@ import (
 
 func TestMusicPlayerInitialization(t *testing.T) {
 	p := NewMusicPlayer()
-	if p.Volume != 1.0 {
-		t.Errorf("Expected volume 1.0, got %f", p.Volume)
+	status := p.GetStatus()
+	if status.Volume != 1.0 {
+		t.Errorf("Expected volume 1.0, got %f", status.Volume)
 	}
-	if p.IsPlaying {
+	if status.IsPlaying {
 		t.Error("Player should not be playing on initialization")
 	}
 }
@@ -19,24 +25,27 @@ func TestVolumeControls(t *testing.T) {
 	p := NewMusicPlayer()
 
 	p.SetVolume(0.5)
-	if p.Volume != 0.5 {
-		t.Errorf("Expected volume 0.5, got %f", p.Volume)
+	status := p.GetStatus()
+	if status.Volume != 0.5 {
+		t.Errorf("Expected volume 0.5, got %f", status.Volume)
 	}
 
 	p.ToggleMute()
-	if !p.IsMuted {
+	status = p.GetStatus()
+	if !status.IsMuted {
 		t.Error("Player should be muted")
 	}
-	if p.Volume != 0 {
-		t.Errorf("Expected volume 0 when muted, got %f", p.Volume)
+	if status.Volume != 0 {
+		t.Errorf("Expected volume 0 when muted, got %f", status.Volume)
 	}
 
 	p.ToggleMute()
-	if p.IsMuted {
+	status = p.GetStatus()
+	if status.IsMuted {
 		t.Error("Player should be unmuted")
 	}
-	if p.Volume != 0.5 {
-		t.Errorf("Expected volume restored to 0.5, got %f", p.Volume)
+	if status.Volume != 0.5 {
+		t.Errorf("Expected volume restored to 0.5, got %f", status.Volume)
 	}
 }
 

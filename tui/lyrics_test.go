@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -61,7 +66,8 @@ Random line
 		},
 		{
 			name:    "Lyrics with different line endings",
-			content: "[00:01.00] Line 1\r\n[00:02.00] Line 2\r[00:03.00] Line 3",
+			content: "[00:01.00] Line 1
+[00:02.00] Line 2[00:03.00] Line 3",
 			expected: []lrcLine{
 				{time: 1 * time.Second, text: "Line 1"},
 				{time: 2 * time.Second, text: "Line 2"},

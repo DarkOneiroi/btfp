@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -77,32 +82,36 @@ func (m *Model) handleServerState(msg serverStateMsg, cmds *[]tea.Cmd) {
 		m.playlist[i] = player.Track{Title: t.Title, Artist: t.Artist, Path: t.Path, Length: t.Length}
 	}
 
+	currentStatus := m.player.GetStatus()
 	if msg.CurrentTrack != nil {
-		if m.player.CurrentTrack == nil || m.player.CurrentTrack.Path != msg.CurrentTrack.Path {
-			m.player.CurrentTrack = &player.Track{
+		if currentStatus.CurrentTrack == nil || currentStatus.CurrentTrack.Path != msg.CurrentTrack.Path {
+			newTrack := &player.Track{
 				Title:  msg.CurrentTrack.Title,
 				Artist: msg.CurrentTrack.Artist,
 				Path:   msg.CurrentTrack.Path,
 				Length: msg.CurrentTrack.Length,
 			}
-			*cmds = append(*cmds, m.syncMetadataAndArt(m.player.CurrentTrack.Path))
+			currentStatus.CurrentTrack = newTrack
+			*cmds = append(*cmds, m.syncMetadataAndArt(newTrack.Path))
 		}
 	} else {
-		m.player.CurrentTrack = nil
+		currentStatus.CurrentTrack = nil
 	}
 
-	m.player.IsPlaying = msg.IsPlaying
-	m.player.IsMuted = msg.IsMuted
-	m.player.Volume = msg.Volume
-	m.player.Elapsed = msg.Elapsed
+	currentStatus.IsPlaying = msg.IsPlaying
+	currentStatus.IsMuted = msg.IsMuted
+	currentStatus.Volume = msg.Volume
+	currentStatus.Elapsed = msg.Elapsed
+	m.player.SetStatus(currentStatus)
 	m.syncPlaylist()
 
 	*cmds = append(*cmds, m.listenToServer())
 }
 
 func (m *Model) handleLyricsDownloaded(msg lyricsDownloadedMsg, cmds *[]tea.Cmd) {
-	if m.player.CurrentTrack != nil {
-		lrcPath := strings.TrimSuffix(m.player.CurrentTrack.Path, filepath.Ext(m.player.CurrentTrack.Path)) + ".lrc"
+	status := m.player.GetStatus()
+	if status.CurrentTrack != nil {
+		lrcPath := strings.TrimSuffix(status.CurrentTrack.Path, filepath.Ext(status.CurrentTrack.Path)) + ".lrc"
 		if msg.path == lrcPath {
 			m.currentLyrics = msg.lyrics
 			if m.view == viewPlayer && (m.bgMode == bgEmpty || m.bgMode == bgVisualization) {
@@ -132,10 +141,11 @@ func (m *Model) handleVizTick(cmds *[]tea.Cmd) {
 		m.vizFrame.Time = time.Since(m.startTime).Seconds()
 		levels := make([]float64, 32)
 
-		if m.player.IsPlaying && !m.player.IsMuted {
+		status := m.player.GetStatus()
+		if status.IsPlaying && !status.IsMuted {
 			for i := range levels {
 				levels[i] = (math.Sin(m.vizFrame.Time*float64(i+1)*0.5)+1.0)*0.3 + rand.Float64()*0.2
-				levels[i] *= m.player.Volume
+				levels[i] *= status.Volume
 				if levels[i] > 1.0 {
 					levels[i] = 1.0
 				}
@@ -166,7 +176,7 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) {
 func (m *Model) handlePlaybackTick(cmds *[]tea.Cmd) {
 	if m.conn == nil {
 		m.player.Update()
-		if m.player.IsDone {
+		if m.player.GetStatus().IsDone {
 			m.skipTrack(1)
 			*cmds = append(*cmds, m.syncMetadataAndArt(m.playlist[m.playingIdx].Path))
 		}

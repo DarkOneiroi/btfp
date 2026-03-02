@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package tui
 
 import (
@@ -188,7 +193,7 @@ func (m *Model) handleVizKeys(key string) {
 }
 
 func (m *Model) adjustVolume(delta float64) {
-	vol := m.player.Volume + delta
+	vol := m.player.GetStatus().Volume + delta
 	if vol < 0 {
 		vol = 0
 	}

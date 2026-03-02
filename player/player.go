@@ -1,3 +1,8 @@
+// Copyright (c) 2026 DarkOneiroi
+// All rights reserved.
+// This source code is proprietary and confidential.
+// Unauthorized copying of this file, via any medium, is strictly prohibited.
+
 package player
 
 import (
@@ -25,26 +30,56 @@ type Track struct {
 	Length time.Duration
 }
 
-// MusicPlayer handles the audio playback lifecycle
-type MusicPlayer struct {
+// Status represents the current state of the player
+type Status struct {
 	CurrentTrack *Track
 	IsPlaying    bool
 	IsDone       bool
 	IsMuted      bool
-	Volume       float64 // 0.0 to 1.0
-	prevVolume   float64
+	Volume       float64
 	Elapsed      time.Duration
-	ctrl         *beep.Ctrl
-	volumeCtrl   *effects.Volume
-	streamer     beep.StreamSeekCloser
-	sampleRate   beep.SampleRate
+}
+
+// Player defines the contract for a music player backend.
+// This interface allows for easier testing and swapping of implementations.
+type Player interface {
+	PlayTrack(t *Track) error
+	TogglePause()
+	SetVolume(v float64)
+	ToggleMute()
+	Seek(d time.Duration)
+	Update()
+	GetStatus() Status
+	SetStatus(s Status)
+}
+
+// MusicPlayer handles the audio playback lifecycle
+type MusicPlayer struct {
+	status     Status
+	prevVolume float64
+	ctrl       *beep.Ctrl
+	volumeCtrl *effects.Volume
+	streamer   beep.StreamSeekCloser
+	sampleRate beep.SampleRate
 }
 
 // NewMusicPlayer creates and initializes a new music player instance
 func NewMusicPlayer() *MusicPlayer {
 	return &MusicPlayer{
-		Volume: 1.0,
+		status: Status{
+			Volume: 1.0,
+		},
 	}
+}
+
+// GetStatus returns a snapshot of the current player status
+func (p *MusicPlayer) GetStatus() Status {
+	return p.status
+}
+
+// SetStatus updates the player's internal status
+func (p *MusicPlayer) SetStatus(s Status) {
+	p.status = s
 }
 
 // PlayTrack starts playback of the given track, selecting the appropriate decoder
@@ -103,7 +138,7 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 
 	p.sampleRate = format.SampleRate
 	p.streamer = streamer
-	p.IsDone = false
+	p.status.IsDone = false
 
 	if streamer.Len() > 0 {
 		t.Length = format.SampleRate.D(streamer.Len()).Round(time.Second)
@@ -127,9 +162,9 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 	}
 	p.applyVolume()
 
-	p.CurrentTrack = t
-	p.IsPlaying = true
-	p.Elapsed = 0
+	p.status.CurrentTrack = t
+	p.status.IsPlaying = true
+	p.status.Elapsed = 0
 
 	speaker.Clear()
 	speaker.Play(p.volumeCtrl)
@@ -141,7 +176,7 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 func (p *MusicPlayer) TogglePause() {
 	if p.ctrl != nil {
 		p.ctrl.Paused = !p.ctrl.Paused
-		p.IsPlaying = !p.ctrl.Paused
+		p.status.IsPlaying = !p.ctrl.Paused
 	}
 }
 
@@ -153,21 +188,21 @@ func (p *MusicPlayer) SetVolume(v float64) {
 	if v > 1 {
 		v = 1
 	}
-	p.Volume = v
-	if !p.IsMuted {
+	p.status.Volume = v
+	if !p.status.IsMuted {
 		p.applyVolume()
 	}
 }
 
 // ToggleMute toggles the mute state
 func (p *MusicPlayer) ToggleMute() {
-	if p.IsMuted {
-		p.IsMuted = false
-		p.Volume = p.prevVolume
+	if p.status.IsMuted {
+		p.status.IsMuted = false
+		p.status.Volume = p.prevVolume
 	} else {
-		p.IsMuted = true
-		p.prevVolume = p.Volume
-		p.Volume = 0
+		p.status.IsMuted = true
+		p.prevVolume = p.status.Volume
+		p.status.Volume = 0
 	}
 	p.applyVolume()
 }
@@ -176,10 +211,10 @@ func (p *MusicPlayer) applyVolume() {
 	if p.volumeCtrl != nil {
 		// Beep's volume is logarithmic. Volume 0 is 1.0x, -1 is 0.5x, etc.
 		// We map 0.0-1.0 to something reasonable.
-		if p.Volume == 0 {
+		if p.status.Volume == 0 {
 			p.volumeCtrl.Volume = -10 // Close to silent
 		} else {
-			p.volumeCtrl.Volume = math.Log2(p.Volume)
+			p.volumeCtrl.Volume = math.Log2(p.status.Volume)
 		}
 	}
 }
@@ -205,13 +240,13 @@ func (p *MusicPlayer) Seek(d time.Duration) {
 
 // Update refreshes the player's internal state (elapsed time, completion)
 func (p *MusicPlayer) Update() {
-	if p.IsPlaying && p.streamer != nil {
+	if p.status.IsPlaying && p.streamer != nil {
 		pos := p.streamer.Position()
-		p.Elapsed = p.sampleRate.D(pos)
+		p.status.Elapsed = p.sampleRate.D(pos)
 
 		if pos >= p.streamer.Len() {
-			p.IsDone = true
-			p.IsPlaying = false
+			p.status.IsDone = true
+			p.status.IsPlaying = false
 		}
 	}
 }

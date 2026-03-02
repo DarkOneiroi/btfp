@@ -42,7 +42,7 @@ Due to size and licensing, models must be manually placed in `~/.config/btfp/mod
 #### 2. Czech (Jirka)
 *   **Location**: `~/.config/btfp/models/cs/`
 *   **Files**: `model.onnx`, `tokens.txt`, `lexicon.txt`
-*   **Source**: [csukuangfj/sherpa-onnx-vits-cs-cz-jirka](https://huggingface.co/csukuangfj/sherpa-onnx-vits-cs-cz-jirka)
+*   **Source**: [csukuangfj/vits-piper-cs_CZ-jirka-medium](https://huggingface.co/csukuangfj/vits-piper-cs_CZ-jirka-medium)
 
 ### TUI Controls
 *   `[t]`: Cycle TTS Language (English <-> Czech)

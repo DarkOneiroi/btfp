@@ -6,7 +6,7 @@
 package tests
 
 import (
-	"btfp/tui"
+	"btfp/services/ui/tui"
 	"os"
 	"path/filepath"
 	"strings"

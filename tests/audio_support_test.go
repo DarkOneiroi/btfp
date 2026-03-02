@@ -6,8 +6,8 @@
 package tests
 
 import (
-	"btfp/tui"
-	"btfp/utils"
+	"btfp/internal/utils"
+	"btfp/services/ui/tui"
 	"os"
 	"path/filepath"
 	"testing"

@@ -1,24 +1,25 @@
-BINARY_NAME=btfp
 PREFIX=$(HOME)/go/bin
 GOLANGCI_LINT_VERSION=v1.64.5
+
+SERVICES = btfp btfp-core btfp-library btfp-fetcher btfp-tts btfp-viz btfp-playlist
 
 .PHONY: all build clean install uninstall test lint lint-install help
 
 all: build
 
 help:
-	@echo "BTFP Makefile"
+	@echo "BTFP Microservices Makefile"
 	@echo "Usage:"
-	@echo "  make build       - Compile the binary"
-	@echo "  make install     - Install binary to $(PREFIX) and setup Waybar"
-	@echo "  make uninstall   - Remove binary from $(PREFIX)"
+	@echo "  make build       - Compile all service binaries"
+	@echo "  make install     - Install all binaries to $(PREFIX) and setup Waybar"
 	@echo "  make test        - Run linting and all tests"
-	@echo "  make lint        - Run golangci-lint"
 	@echo "  make clean       - Remove local build artifacts"
 
 build:
-	@echo "Building $(BINARY_NAME)..."
-	go build -o $(BINARY_NAME) main.go
+	@for service in $(SERVICES); do \
+		echo "Building $$service..."; \
+		go build -o $$service cmd/$$service/main.go; \
+	done
 
 lint:
 	@if command -v golangci-lint >/dev/null 2>&1; then \
@@ -38,19 +39,23 @@ test: lint
 
 clean:
 	@echo "Cleaning up..."
-	rm -f $(BINARY_NAME)
+	rm -f $(SERVICES)
 
 install: build
 	@echo "Installing to $(PREFIX)..."
 	mkdir -p $(PREFIX)
-	cp $(BINARY_NAME) $(PREFIX)/
+	for service in $(SERVICES); do \
+		cp $$service $(PREFIX)/; \
+	done
 	@echo "Initializing configuration..."
 	mkdir -p $(HOME)/.config/btfp/themes
 	@echo "Setting up Waybar integration..."
-	bash scripts/setup_waybar.sh $(PREFIX)/$(BINARY_NAME)
+	bash scripts/setup_waybar.sh $(PREFIX)/btfp
 	@echo "Installation complete. Ensure $(PREFIX) is in your PATH."
 
 uninstall:
 	@echo "Uninstalling from $(PREFIX)..."
-	rm -f $(PREFIX)/$(BINARY_NAME)
+	for service in $(SERVICES); do \
+		rm -f $(PREFIX)/$$service; \
+	done
 	@echo "Uninstall complete."

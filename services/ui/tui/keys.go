@@ -7,6 +7,7 @@ package tui
 
 import (
 	"btfp/internal/ipc-shared"
+	"btfp/services/visualization/visualizations"
 	"os"
 	"path/filepath"
 	"time"
@@ -68,7 +69,7 @@ func (m *Model) processKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 	case "v":
 		m.cycleBGMode()
-		if m.bgMode != bgVisualization {
+		if m.bgMode != bgVisualization && m.bgMode != bgBars {
 			m.vizData = ""
 			m.vizPending = false
 		}
@@ -174,13 +175,17 @@ func (m *Model) handleEnter(cmds *[]tea.Cmd) {
 }
 
 func (m *Model) handleVizKeys(key string) {
+	// Sync preset if it was forced to EQ by background mode
+	if m.preset >= int(visualizations.PatternTypeCount) {
+		m.preset = 0
+	}
 	switch key {
 	case "c":
-		m.preset = (m.preset + 1) % 10
+		m.preset = (m.preset + 1) % int(visualizations.PatternTypeCount)
 	case "i":
-		m.colorMode = (m.colorMode + 1) % 5
+		m.colorMode = (m.colorMode + 1) % int(visualizations.ColorModeCount)
 	case "p":
-		m.palette = (m.palette + 1) % 15
+		m.palette = (m.palette + 1) % int(visualizations.PaletteTypeCount)
 	}
 	m.vizPending = false
 }

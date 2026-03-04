@@ -7,7 +7,9 @@ package tui
 
 import (
 	"btfp/internal/models"
+	"btfp/services/visualization/visualizations"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +21,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case serverStateMsg:
+		m.err = nil // Clear transient error
 		if msg.ShouldQuit {
 			return m, tea.Quit
 		}
@@ -35,16 +38,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.listenToServer())
 
 	case vizFrameMsg:
+		m.err = nil // Clear transient error
 		m.vizData = string(msg)
 		m.vizPending = false
 
 	case vizTickMsg:
-		if m.bgMode != bgVisualization {
+		if m.bgMode != bgVisualization && m.bgMode != bgBars {
 			m.vizData = ""
 			m.vizPending = false
 		} else if !m.vizPending {
 			m.vizPending = true
-			cmds = append(cmds, m.requestVizFrame(m.width, m.height, m.isPlaying, m.isMuted, m.volume, m.preset, m.colorMode, m.palette, m.bgMode, m.startTime))
+			preset := m.preset
+			if m.bgMode == bgBars {
+				preset = int(visualizations.PatternEQ)
+			}
+			
+			// Calculate viz width to avoid art panel
+			vW := m.width
+			if m.view == viewLibrary {
+				vW = (m.width / 3) * 2
+			} else if m.view == viewPlaylist {
+				vW = m.width / 2
+			}
+			
+			cmds = append(cmds, m.requestVizFrame(vW, m.height, m.isPlaying, m.isMuted, m.volume, preset, m.colorMode, m.palette, m.bgMode, m.startTime))
 		}
 		cmds = append(cmds, vizTick())
 
@@ -56,15 +73,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case artDownloadedMsg:
-		delete(m.artCache, filepath.Dir(string(msg)))
+		dir := filepath.Dir(string(msg))
+		delete(m.artCache, dir)
+		// Metadata might need refreshing if it was open for a song in this dir
+		for k := range m.metadataCache {
+			if filepath.Dir(k) == dir {
+				delete(m.metadataCache, k)
+			}
+		}
 		if m.view == viewLibrary {
 			cmds = append(cmds, m.loadDirectory(m.currentDir))
 		}
 
 	case lyricsDownloadedMsg:
 		m.currentLyrics = msg.lyrics
+		// Lyrics path is usually song.lrc, metadata key is song.mp3
+		songPath := strings.TrimSuffix(msg.path, ".lrc")
+		for k := range m.metadataCache {
+			if strings.HasPrefix(k, songPath) {
+				delete(m.metadataCache, k)
+			}
+		}
 
 	case tea.KeyMsg:
+		// Ensure preset is in range before processing keys
+		if m.preset >= int(visualizations.PatternTypeCount) {
+			m.preset = 0
+		}
 		if m.libList.FilterState() == list.Filtering {
 			var listCmd tea.Cmd
 			m.libList, listCmd = m.libList.Update(msg)
@@ -99,12 +134,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.libList.SetSize(m.width/3-2, m.height-2)
 		m.playList.SetSize(m.width/2-2, m.height-2)
+		m.artCache = make(map[string]string)
 
 	case tickMsg:
 		cmds = append(cmds, tick())
 
 	case errMsg:
 		m.vizPending = false
+		m.err = msg
+		// Don't stop the world, let other messages come in and maybe clear m.err.
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)

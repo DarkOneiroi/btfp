@@ -15,9 +15,11 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"time"
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	session := flag.String("session", "music", "Session name")
 	flag.Parse()
 
@@ -74,20 +76,28 @@ func handleClient(conn net.Conn) {
 			}
 
 			levels := make([]float64, 32)
-			if isPlaying {
-				for i := range levels {
-					levels[i] = (math.Sin(currTime*float64(i+1)*0.5)+1.0)*0.3 + rand.Float64()*0.2
+			for i := range levels {
+				if isPlaying {
+					// Use Sin + Random for a nice dynamic EQ effect
+					levels[i] = (math.Sin(currTime*float64(i+1)*0.5)+1.0)*0.3 + (rand.Float64() * 0.4)
 					levels[i] *= volume
+				} else {
+					// Low-key breathing animation when paused
+					levels[i] = (math.Sin(currTime*0.5+float64(i)*0.2)+1.0)*0.05
 				}
+				if levels[i] > 1.0 { levels[i] = 1.0 }
 			}
 
 			frame.PatternType = visualizations.PatternType(pattern)
 			frame.ColorMode = visualizations.ColorMode(colorMode)
 			frame.PaletteType = visualizations.PaletteType(palette)
 			frame.AudioLevels = levels
+			frame.Time = currTime
 			frame.GeneratePattern(levels[0])
 			rendered := frame.Render(false)
 			_ = enc.Encode(rendered)
+		} else {
+			_ = enc.Encode("")
 		}
 	}
 }

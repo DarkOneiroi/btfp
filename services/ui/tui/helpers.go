@@ -308,15 +308,20 @@ func (m *Model) listenToServer() tea.Cmd {
 func (m *Model) requestVizFrame(w, h int, isPlaying, isMuted bool, vol float64, preset, colorMode, palette int, bg backgroundMode, startTime time.Time) tea.Cmd {
 	session := m.session
 	return func() tea.Msg {
-		if bg != bgVisualization { return nil }
+		if bg != bgVisualization && bg != bgBars {
+			return nil
+		}
 
-		socketPath := ipc.GetSocketPath("viz", session)
-		conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
-		if err != nil { return nil }
-		defer func() { _ = conn.Close() }()
-
-		enc := gob.NewEncoder(conn)
-		dec := gob.NewDecoder(conn)
+		if m.vizConn == nil {
+			socketPath := ipc.GetSocketPath("viz", session)
+			conn, err := net.DialTimeout("unix", socketPath, 300*time.Millisecond)
+			if err != nil {
+				return errMsg(err)
+			}
+			m.vizConn = conn
+			m.vizEnc = gob.NewEncoder(conn)
+			m.vizDec = gob.NewDecoder(conn)
+		}
 
 		payload := map[string]interface{}{
 			"width":     w,
@@ -329,16 +334,27 @@ func (m *Model) requestVizFrame(w, h int, isPlaying, isMuted bool, vol float64, 
 			"time":      time.Since(startTime).Seconds(),
 		}
 
-		_ = enc.Encode(ipc.Command{Type: ipc.CmdVizGenerate, Payload: payload})
+		if err := m.vizEnc.Encode(ipc.Command{Type: ipc.CmdVizGenerate, Payload: payload}); err != nil {
+			m.vizConn = nil
+			m.vizEnc = nil
+			m.vizDec = nil
+			return errMsg(err)
+		}
+		
 		var rendered string
-		if err := dec.Decode(&rendered); err != nil { return nil }
+		if err := m.vizDec.Decode(&rendered); err != nil {
+			m.vizConn = nil
+			m.vizEnc = nil
+			m.vizDec = nil
+			return errMsg(err)
+		}
 		return vizFrameMsg(rendered)
 	}
 }
 
 func (m *Model) cycleBGMode() {
-	for i := 0; i < 4; i++ {
-		m.bgMode = (m.bgMode + 1) % 4
+	for i := 0; i < 5; i++ {
+		m.bgMode = (m.bgMode + 1) % 5
 		if m.bgMode == bgImage && m.cfg.ImagePath == "" { continue }
 		if m.bgMode == bgKaraoke && len(m.currentLyrics) == 0 { continue }
 		break

@@ -11,7 +11,7 @@ import (
 )
 
 func TestImageToASCIIInvalidPath(t *testing.T) {
-	res := ImageToASCII("non-existent.jpg", 10)
+	res := ImageToASCII("non-existent.jpg", 10, false)
 	if res != "" {
 		t.Error("expected empty string for invalid path")
 	}

@@ -6,7 +6,6 @@
 package tui
 
 import (
-	"btfp/internal/utils"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,18 +20,26 @@ import (
 // --- View Rendering ---
 
 func (m *Model) renderLibraryView() string {
-	tree, content, right := m.renderTree(), m.renderListView(m.libList), m.renderRightPanel()
-	l := lipgloss.NewStyle().Width(m.width/3).MaxHeight(m.height).Padding(0, 1).Render(tree)
-	mid := lipgloss.NewStyle().Width(m.width/3).MaxHeight(m.height).Padding(0, 1).Render(content)
-	r := lipgloss.NewStyle().Width(m.width/3).MaxHeight(m.height).Padding(0, 1).Render(right)
+	w := m.width / 3
+	tree := m.renderTree()
+	content := m.renderListView(m.libList)
+	right := m.renderRightPanel(w)
+
+	l := lipgloss.NewStyle().Width(w).Height(m.height).Padding(0, 1).Align(lipgloss.Left).Render(tree)
+	mid := lipgloss.NewStyle().Width(w).Height(m.height).Padding(0, 1).Align(lipgloss.Left).Render(content)
+	rw := m.width - (2 * w)
+	r := lipgloss.NewStyle().Width(rw).Height(m.height).Padding(0, 1).Align(lipgloss.Left).Render(right)
 	return lipgloss.JoinHorizontal(lipgloss.Top, l, mid, r)
 }
 
 func (m *Model) renderPlaylistView() string {
+	w := m.width / 2
 	content := m.renderListView(m.playList)
-	right := m.renderRightPanel()
-	l := lipgloss.NewStyle().Width(m.width/2-2).MaxHeight(m.height).Padding(0, 1).Render(content)
-	r := lipgloss.NewStyle().Width(m.width/2-2).MaxHeight(m.height).Padding(0, 1).Render(right)
+	right := m.renderRightPanel(w)
+
+	l := lipgloss.NewStyle().Width(w).Height(m.height).Padding(0, 1).Align(lipgloss.Left).Render(content)
+	rw := m.width - w
+	r := lipgloss.NewStyle().Width(rw).Height(m.height).Padding(0, 1).Align(lipgloss.Left).Render(right)
 	return lipgloss.JoinHorizontal(lipgloss.Top, l, r)
 }
 
@@ -51,7 +58,7 @@ func (m *Model) renderPlayerView() string {
 		} else {
 			msg += "Press [tab] for Library."
 		}
-		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render(msg)
+		return lipgloss.NewStyle().Width(m.width).Height(m.height).Align(lipgloss.Center, lipgloss.Center).Render(msg)
 	}
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Title)).Bold(true)
 	barW := 40
@@ -87,10 +94,10 @@ func (m *Model) renderPlayerView() string {
 	}
 
 	ui := lipgloss.JoinVertical(lipgloss.Center, uiItems...)
-	return lipgloss.NewStyle().Width(80).Height(20).Align(lipgloss.Center, lipgloss.Center).Render(ui)
+	return lipgloss.NewStyle().Width(m.width).Height(m.height).Align(lipgloss.Center, lipgloss.Center).Render(ui)
 }
 
-func (m *Model) renderRightPanel() string {
+func (m *Model) renderRightPanel(width int) string {
 	var songPath string
 	if m.view == viewLibrary {
 		if sel, ok := m.libList.SelectedItem().(item); ok {
@@ -105,22 +112,24 @@ func (m *Model) renderRightPanel() string {
 	}
 
 	if songPath == "" {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render("\n\n   (No Selection)")
+		return lipgloss.NewStyle().Width(width).Foreground(lipgloss.Color(m.theme.Subtext)).Render("\n\n   (No Selection)")
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("\nQUEUE: %d tracks", len(m.playlist))))
+
+	artW := width - 4 // Account for some padding
+	content := lipgloss.JoinVertical(lipgloss.Left, m.renderArt(songPath, artW), m.renderMetadata(songPath), lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render(fmt.Sprintf("\nQUEUE: %d tracks", len(m.playlist))))
+	return lipgloss.NewStyle().Width(width).Height(m.height).Render(content)
 }
 
-func (m *Model) renderArt(path string) string {
+func (m *Model) renderArt(path string, width int) string {
 	info, _ := os.Stat(path)
 	dir := path
 	if info != nil && !info.IsDir() {
 		dir = filepath.Dir(path)
 	}
 
-	if art, ok := m.artCache[dir]; ok {
-		return art
-	}
-
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("COVER ART")
+	
+	// Check if art exists
 	var artPath string
 	for _, n := range []string{"cover.jpg", "folder.jpg", "album.jpg", "band.jpg", "artist.jpg"} {
 		p := filepath.Join(dir, n)
@@ -130,11 +139,10 @@ func (m *Model) renderArt(path string) string {
 		}
 	}
 
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("COVER ART")
 	if artPath == "" {
 		placeholder := lipgloss.NewStyle().
-			Width(m.width/5).
-			Height(m.width/10).
+			Width(width).
+			Height(width/2).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(m.theme.Subtext)).
 			Align(lipgloss.Center, lipgloss.Center).
@@ -142,9 +150,51 @@ func (m *Model) renderArt(path string) string {
 		return fmt.Sprintf("\n%s\n%s", title, placeholder)
 	}
 
-	art := fmt.Sprintf("\n%s\n%s", title, utils.ImageToASCII(artPath, m.width/5))
-	m.artCache[dir] = art
-	return art
+	// Return a "hole" of spaces. This ensures the background (visualizations)
+	// doesn't bleed through, and provides a clear area for the OSC 1337 overlay.
+	height := width / 2
+	var sb strings.Builder
+	line := strings.Repeat(" ", width)
+	for i := 0; i < height; i++ {
+		sb.WriteString(line)
+		if i < height-1 {
+			sb.WriteString("\n")
+		}
+	}
+	
+	return fmt.Sprintf("\n%s\n%s", title, sb.String())
+}
+
+// GetArtPath returns the path to the current song's art
+func (m *Model) GetArtPath() string {
+	var songPath string
+	if m.view == viewLibrary {
+		if sel, ok := m.libList.SelectedItem().(item); ok {
+			songPath = sel.path
+		}
+	} else if m.view == viewPlaylist {
+		if sel, ok := m.playList.SelectedItem().(item); ok {
+			songPath = sel.path
+		}
+	} else if m.playingIdx >= 0 && m.playingIdx < len(m.playlist) {
+		songPath = m.playlist[m.playingIdx].Path
+	}
+
+	if songPath == "" { return "" }
+	
+	info, _ := os.Stat(songPath)
+	dir := songPath
+	if info != nil && !info.IsDir() {
+		dir = filepath.Dir(songPath)
+	}
+
+	for _, n := range []string{"cover.jpg", "folder.jpg", "album.jpg", "band.jpg", "artist.jpg"} {
+		p := filepath.Join(dir, n)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func (m *Model) renderMetadata(path string) string {
@@ -233,10 +283,12 @@ func (m *Model) renderLegend() string {
 			{"[a]", "Add Selected"},
 			{"[back]", "Go Up"},
 			{"[/]", "Filter"},
+			{"[v]", "BG Mode"},
 		}
 	case viewPlaylist:
 		keys = [][]string{
 			{"[enter]", "Play Selected"},
+			{"[v]", "BG Mode"},
 		}
 	case viewPlayer:
 		keys = [][]string{
@@ -326,13 +378,11 @@ func (m *Model) overlayUI(bg, fg string) string {
 			fgW = w
 		}
 	}
-	top, left := m.height/2-fgH/2, m.width/2-fgW/2
-	if top < 0 {
-		top = 0
-	}
-	if left < 0 {
-		left = 0
-	}
+	// Fixed top-left alignment for full-screen views
+	top, left := 0, 0
+	if fgH < m.height { top = m.height/2 - fgH/2 }
+	if fgW < m.width { left = m.width/2 - fgW/2 }
+
 	var res strings.Builder
 	for y := 0; y < m.height; y++ {
 		bgL := strings.Repeat(" ", m.width)

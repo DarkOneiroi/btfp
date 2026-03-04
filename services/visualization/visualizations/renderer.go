@@ -235,7 +235,8 @@ func (f *Frame) genEQ(u, v, t, audioLevel float64) float64 {
 	}
 	h := f.AudioLevels[bandIdx]
 	if 1.0-v <= h {
-		return 1.0 - ((1.0 - v) / (h + 0.001) * 0.5)
+		// Return a value between 0.5 and 1.0 based on height
+		return 0.5 + (h-(1.0-v))*0.5
 	}
 	return 0.0
 }

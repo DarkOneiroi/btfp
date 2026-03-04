@@ -19,8 +19,11 @@ import (
 )
 
 // ImageToASCII converts an image to high-fidelity ASCII or uses terminal-native protocols if available.
-func ImageToASCII(path string, width int) string {
-	if os.Getenv("TERM_PROGRAM") == "WezTerm" || os.Getenv("TERM_PROGRAM") == "iTerm.app" {
+func ImageToASCII(path string, width int, useProtocol bool) string {
+	if width <= 0 {
+		return ""
+	}
+	if useProtocol && (os.Getenv("TERM_PROGRAM") == "WezTerm" || os.Getenv("TERM_PROGRAM") == "iTerm.app") {
 		return imageToProtocol(path, width)
 	}
 
@@ -38,12 +41,19 @@ func ImageToASCII(path string, width int) string {
 	bounds := img.Bounds()
 	ratio := float64(bounds.Dy()) / float64(bounds.Dx())
 
-	// Aspect ratio: terminal cells are roughly 2:1 height:width.
-	// Since 1 half-block char = 2 vertical pixels, the effective cell is 1:1.
-	// We adjust height to maintain the image's original aspect ratio.
-	height := int(float64(width) * ratio * 2.0)
+	// Terminal cells are roughly 2:1 height:width.
+	// Half-block character '▀' is roughly 1:1.
+	// To maintain aspect ratio (ratio = H/W), we need:
+	// NumHalfBlocks_H / NumHalfBlocks_W = ratio.
+	// NumHalfBlocks_W = width.
+	// So NumHalfBlocks_H = width * ratio.
+	height := int(float64(width) * ratio)
 	if height%2 != 0 {
 		height++
+	}
+
+	if height <= 0 {
+		return ""
 	}
 
 	// High quality Lanczos3 resampling
@@ -81,7 +91,8 @@ func imageToProtocol(path string, width int) string {
 
 	encoded := base64.StdEncoding.EncodeToString(data)
 	// OSC 1337 ; File = [args] : [base64] ST
-	return fmt.Sprintf("\033]1337;File=width=%d;preserveAspectRatio=1;inline=1:%s\033\\", width, encoded)
+	// Specify both width and height to help terminal reserve space properly
+	return fmt.Sprintf("\033]1337;File=width=%d;height=%d;preserveAspectRatio=1;inline=1:%s\033\\", width, width/2, encoded)
 }
 
 // ContrastEnhance improves image visibility for terminal rendering (unused currently, but available)

@@ -10,8 +10,6 @@ import (
 	"btfp/internal/models"
 	"testing"
 	"time"
-
-	"github.com/gopxl/beep"
 )
 
 func TestMusicPlayerInitialization(t *testing.T) {

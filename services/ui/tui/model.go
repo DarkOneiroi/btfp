@@ -35,6 +35,7 @@ type backgroundMode int
 
 const (
 	bgVisualization backgroundMode = iota
+	bgBars
 	bgKaraoke
 	bgEmpty
 	bgImage
@@ -128,11 +129,19 @@ type Model struct {
 	enc     *gob.Encoder
 	dec     *gob.Decoder
 	vizConn net.Conn
+	vizEnc  *gob.Encoder
+	vizDec  *gob.Decoder
 
 	// Caches
 	metadataCache  map[string]string
 	artCache       map[string]string
 	playlistCounts map[string]int
+
+	// Internal rendering state
+	lastArtPath  string
+	lastArtWidth int
+	lastArtView  viewState
+	artProtocol  string
 }
 
 // NewModel initializes a new application model

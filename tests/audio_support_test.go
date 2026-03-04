@@ -28,7 +28,7 @@ func TestAudioFormatSupport(t *testing.T) {
 	}
 
 	// 1. Initialize Model
-	_ = tui.NewModel("library")
+	_ = tui.NewModel("library", "music")
 
 	// 2. Check utils for support
 	for _, f := range formats {

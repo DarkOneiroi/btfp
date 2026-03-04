@@ -1,7 +1,7 @@
 PREFIX=$(HOME)/go/bin
 GOLANGCI_LINT_VERSION=v1.64.5
 
-SERVICES = btfp btfp-core btfp-library btfp-fetcher btfp-tts btfp-viz btfp-playlist
+SERVICES = btfp btfp-core btfp-library btfp-fetcher btfp-viz btfp-playlist
 
 .PHONY: all build clean install uninstall test lint lint-install help
 
@@ -42,10 +42,12 @@ clean:
 	rm -f $(SERVICES)
 
 install: build
+	@echo "Stopping running microservices..."
+	-pkill -x btfp-core btfp-library btfp-fetcher btfp-viz btfp-playlist || true
 	@echo "Installing to $(PREFIX)..."
 	mkdir -p $(PREFIX)
-	for service in $(SERVICES); do \
-		cp $$service $(PREFIX)/; \
+	@for service in $(SERVICES); do \
+		install -m 755 $$service $(PREFIX)/$$service; \
 	done
 	@echo "Initializing configuration..."
 	mkdir -p $(HOME)/.config/btfp/themes

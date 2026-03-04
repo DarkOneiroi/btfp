@@ -14,8 +14,7 @@ import (
 
 	"btfp/internal/config"
 	"btfp/internal/ipc-shared"
-	"btfp/services/core/player"
-	"btfp/services/visualization/visualizations"
+	"btfp/internal/models"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,7 +35,6 @@ type backgroundMode int
 
 const (
 	bgVisualization backgroundMode = iota
-	bgEQBars
 	bgKaraoke
 	bgEmpty
 	bgImage
@@ -83,6 +81,10 @@ type Model struct {
 	// Terminal dimensions
 	width, height int
 
+	// Session identity
+	session     string
+	multiWindow bool
+
 	// Navigation and state
 	view       viewState
 	lockedView bool
@@ -94,24 +96,32 @@ type Model struct {
 	playList list.Model
 
 	// Data
-	playlist      []player.Track
+	playlist      []models.Track
 	playingIdx    int
 	currentDir    string
 	selectedPaths map[string]bool
 	currentLyrics []lrcLine
 	startTime     time.Time
 
+	// Current Playback Status (Synced from Server)
+	currTrack *models.Track
+	isPlaying bool
+	isMuted   bool
+	volume    float64
+	elapsed   time.Duration
+
 	// Configuration
 	cfg   config.Config
 	theme config.Theme
 
 	// Visualizations
-	vizFrame   *visualizations.Frame
+	vizData    string
 	preset     int
 	colorMode  int
 	palette    int
 	showLegend bool
 	LastResize time.Time
+	vizPending bool
 
 	// Infrastructure
 	conn    net.Conn
@@ -126,7 +136,7 @@ type Model struct {
 }
 
 // NewModel initializes a new application model
-func NewModel(initialView string) *Model {
+func NewModel(initialView string, session string) *Model {
 	cfg, theme := config.LoadConfig()
 	home, _ := os.UserHomeDir()
 	musicDir := filepath.Join(home, "Music")
@@ -152,6 +162,7 @@ func NewModel(initialView string) *Model {
 	}
 
 	m := &Model{
+		session:        session,
 		view:           startView,
 		lockedView:     locked,
 		bgMode:         backgroundMode(cfg.BGMode),
@@ -170,13 +181,16 @@ func NewModel(initialView string) *Model {
 		playlistCounts: make(map[string]int),
 	}
 
-	// Initialize lists with default styling
 	m.libList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	m.libList.Title = "LIBRARY"
 	m.playList = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	m.playList.Title = "PLAYLIST"
 
 	return m
+}
+
+func (m *Model) SetMultiWindow(mw bool) {
+	m.multiWindow = mw
 }
 
 // Init initializes the Bubble Tea loop
@@ -196,12 +210,32 @@ func (m *Model) SetConn(conn net.Conn, enc *gob.Encoder, dec *gob.Decoder) {
 	m.dec = dec
 }
 
+func (m *Model) SetLockedView(locked bool) {
+	m.lockedView = locked
+}
+
 func (m *Model) sendCommand(cmd ipc.Command) {
-	if m.enc != nil {
-		if err := m.enc.Encode(cmd); err != nil {
-			m.err = err
-		}
+	if m.enc == nil {
+		return
 	}
+
+	err := m.enc.Encode(cmd)
+	if err == nil {
+		return
+	}
+
+	_ = m.conn.Close()
+	socketPath := ipc.GetSocketPath("core", m.session)
+	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+	if err != nil {
+		m.err = err
+		return
+	}
+
+	m.conn = conn
+	m.enc = gob.NewEncoder(conn)
+	m.dec = gob.NewDecoder(conn)
+	_ = m.enc.Encode(cmd)
 }
 
 func tick() tea.Cmd {
@@ -211,7 +245,7 @@ func tick() tea.Cmd {
 }
 
 func vizTick() tea.Cmd {
-	return tea.Tick(time.Millisecond*33, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*50, func(t time.Time) tea.Msg {
 		return vizTickMsg(t)
 	})
 }

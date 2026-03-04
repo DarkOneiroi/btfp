@@ -6,6 +6,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
@@ -17,9 +18,12 @@ import (
 	"github.com/nfnt/resize"
 )
 
-// ImageToASCII converts an image to high-fidelity ASCII using half-blocks and Truecolor.
-// Half-blocks (▀) allow for 2 vertical pixels per character cell, doubling vertical resolution.
+// ImageToASCII converts an image to high-fidelity ASCII or uses terminal-native protocols if available.
 func ImageToASCII(path string, width int) string {
+	if os.Getenv("TERM_PROGRAM") == "WezTerm" || os.Getenv("TERM_PROGRAM") == "iTerm.app" {
+		return imageToProtocol(path, width)
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return ""
@@ -67,6 +71,17 @@ func ImageToASCII(path string, width int) string {
 	}
 
 	return sb.String()
+}
+
+func imageToProtocol(path string, width int) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(data)
+	// OSC 1337 ; File = [args] : [base64] ST
+	return fmt.Sprintf("\033]1337;File=width=%d;preserveAspectRatio=1;inline=1:%s\033\\", width, encoded)
 }
 
 // ContrastEnhance improves image visibility for terminal rendering (unused currently, but available)

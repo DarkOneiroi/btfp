@@ -8,21 +8,26 @@ package main
 import (
 	"btfp/internal/ipc-shared"
 	"encoding/gob"
+	"flag"
 	"fmt"
 	"net"
 	"os"
 )
 
 func main() {
-	_ = os.Remove(ipc.PlaylistSocketPath)
-	listener, err := net.Listen("unix", ipc.PlaylistSocketPath)
+	session := flag.String("session", "music", "Session name")
+	flag.Parse()
+
+	socketPath := ipc.GetSocketPath("playlist", *session)
+	_ = os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		fmt.Printf("Failed to start playlist service: %v\n", err)
 		return
 	}
 	defer func() { _ = listener.Close() }()
 
-	fmt.Println("Playlist Service started on", ipc.PlaylistSocketPath)
+	fmt.Printf("Playlist Service [%s] started on %s\n", *session, socketPath)
 
 	for {
 		conn, err := listener.Accept()

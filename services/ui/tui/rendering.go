@@ -29,7 +29,8 @@ func (m *Model) renderLibraryView() string {
 }
 
 func (m *Model) renderPlaylistView() string {
-	content, right := m.renderListView(m.playList), m.renderRightPanel()
+	content := m.renderListView(m.playList)
+	right := m.renderRightPanel()
 	l := lipgloss.NewStyle().Width(m.width/2-2).MaxHeight(m.height).Padding(0, 1).Render(content)
 	r := lipgloss.NewStyle().Width(m.width/2-2).MaxHeight(m.height).Padding(0, 1).Render(right)
 	return lipgloss.JoinHorizontal(lipgloss.Top, l, r)
@@ -38,23 +39,25 @@ func (m *Model) renderPlaylistView() string {
 func (m *Model) renderPlayerView() string {
 	var trackTitle string
 	var trackLength time.Duration
-	var elapsed time.Duration
-	var volume float64
-	var isPlaying bool
-	var isMuted bool
-
-	// In a real microservices setup, these would come from m.lastServerState
-	// For now we assume they are synced into the model fields if we had them.
-	// Since we refactored handleServerState to not update player, we need to store them in Model.
+	if m.currTrack != nil {
+		trackTitle = m.currTrack.Title
+		trackLength = m.currTrack.Length
+	}
 
 	if trackTitle == "" {
-		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render("No track playing.\nPress [tab] for Library.")
+		msg := "No track playing.\n"
+		if m.lockedView {
+			msg += "Please select a track in the Library window."
+		} else {
+			msg += "Press [tab] for Library."
+		}
+		return lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render(msg)
 	}
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Title)).Bold(true)
 	barW := 40
 	pct := 0.0
 	if trackLength > 0 {
-		pct = float64(elapsed) / float64(trackLength)
+		pct = float64(m.elapsed) / float64(trackLength)
 	}
 	fill := int(float64(barW) * pct)
 	if fill > barW {
@@ -62,17 +65,28 @@ func (m *Model) renderPlayerView() string {
 	}
 	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(strings.Repeat("━", fill)) + lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Subtext)).Render(strings.Repeat("━", barW-fill))
 	stateText := "PLAYING"
-	if !isPlaying {
+	if !m.isPlaying {
 		stateText = "PAUSED"
 	}
-	volStr := fmt.Sprintf("VOL: %d%%", int(volume*100))
-	if isMuted {
+	volStr := fmt.Sprintf("VOL: %d%%", int(m.volume*100))
+	if m.isMuted {
 		volStr = "VOL: MUTE"
 	}
 
-	ttsInfo := fmt.Sprintf("TTS: %s | Voice: %d", strings.ToUpper(m.cfg.TTSLanguage), int(m.cfg.TTSSpeed))
+	uiItems := []string{
+		lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"),
+		"",
+		titleStyle.Render(trackTitle),
+		fmt.Sprintf("%s / %s", formatDuration(m.elapsed), formatDuration(trackLength)),
+		volStr,
+		"",
+		bar,
+		"",
+		lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText),
+		"\n[h] Toggle Help",
+	}
 
-	ui := lipgloss.JoinVertical(lipgloss.Center, lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Bold(true).Render("BTFP PLAYER"), "", titleStyle.Render(trackTitle), fmt.Sprintf("%s / %s", formatDuration(elapsed), formatDuration(trackLength)), volStr, ttsInfo, "", bar, "", lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Highlight)).Render(stateText), "\n[h] Toggle Help")
+	ui := lipgloss.JoinVertical(lipgloss.Center, uiItems...)
 	return lipgloss.NewStyle().Width(80).Height(20).Align(lipgloss.Center, lipgloss.Center).Render(ui)
 }
 
@@ -86,7 +100,7 @@ func (m *Model) renderRightPanel() string {
 		if sel, ok := m.playList.SelectedItem().(item); ok {
 			songPath = sel.path
 		}
-	} else if m.playingIdx >= 0 {
+	} else if m.playingIdx >= 0 && m.playingIdx < len(m.playlist) {
 		songPath = m.playlist[m.playingIdx].Path
 	}
 
@@ -118,7 +132,14 @@ func (m *Model) renderArt(path string) string {
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Accent)).Render("COVER ART")
 	if artPath == "" {
-		return fmt.Sprintf("\n%s\n\n   (No Art)", title)
+		placeholder := lipgloss.NewStyle().
+			Width(m.width/5).
+			Height(m.width/10).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(m.theme.Subtext)).
+			Align(lipgloss.Center, lipgloss.Center).
+			Render("No Cover Art\nFound")
+		return fmt.Sprintf("\n%s\n%s", title, placeholder)
 	}
 
 	art := fmt.Sprintf("\n%s\n%s", title, utils.ImageToASCII(artPath, m.width/5))
@@ -225,8 +246,6 @@ func (m *Model) renderLegend() string {
 			{"[+/-]", "Volume"},
 			{"[m]", "Mute"},
 			{"[v]", "BG Mode"},
-			{"[t]", "TTS Lang"},
-			{"[s]", "TTS Voice"},
 		}
 	case viewViz:
 		keys = [][]string{
@@ -256,12 +275,9 @@ func (m *Model) renderKaraoke() string {
 		return ""
 	}
 
-	// We'd need current elapsed from Model state
-	elapsed := time.Duration(0)
-
 	activeIdx := -1
 	for i, line := range m.currentLyrics {
-		if elapsed >= line.time {
+		if m.elapsed >= line.time {
 			activeIdx = i
 		} else {
 			break

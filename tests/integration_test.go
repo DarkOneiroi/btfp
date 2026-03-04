@@ -26,7 +26,7 @@ func TestAppLifecycle(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(musicDir, "test.mp3"), []byte("mock audio data"), 0644)
 
 	// 1. Initialize Model
-	m := tui.NewModel("library")
+	m := tui.NewModel("library", "music")
 
 	// 2. Mock Window Size
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -38,7 +38,7 @@ func TestAppLifecycle(t *testing.T) {
 }
 
 func TestLayoutOverflow(t *testing.T) {
-	m := tui.NewModel("library")
+	m := tui.NewModel("library", "music")
 	// Simulate terminal size
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 

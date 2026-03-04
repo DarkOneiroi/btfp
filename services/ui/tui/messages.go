@@ -24,4 +24,5 @@ type (
 	tickMsg        time.Time
 	libraryMsg     []list.Item
 	serverStateMsg ipc.PlayerState
+	vizFrameMsg    string
 )

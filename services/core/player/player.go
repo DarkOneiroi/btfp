@@ -7,6 +7,7 @@ package player
 
 import (
 	"btfp/internal/config"
+	"btfp/internal/models"
 	"fmt"
 	"math"
 	"os"
@@ -23,73 +24,55 @@ import (
 	"github.com/gopxl/beep/wav"
 )
 
-// Track represents a single audio track and its metadata
-type Track struct {
-	Title  string
-	Artist string
-	Path   string
-	Length time.Duration
-}
+// Global fixed sample rate to avoid hardware re-init panics
+const HardwareSampleRate = beep.SampleRate(44100)
 
-// Status represents the current state of the player
-type Status struct {
-	CurrentTrack *Track
-	IsPlaying    bool
-	IsDone       bool
-	IsMuted      bool
-	Volume       float64
-	Elapsed      time.Duration
-}
-
-// Player defines the contract for a music player backend.
-// This interface allows for easier testing and swapping of implementations.
 type Player interface {
-	PlayTrack(t *Track) error
+	PlayTrack(t *models.Track) error
 	TogglePause()
 	SetVolume(v float64)
 	ToggleMute()
 	Seek(d time.Duration)
 	Update()
-	GetStatus() Status
-	SetStatus(s Status)
-	SetTTSParams(lang string, speaker int)
+	GetStatus() models.Status
+	SetStatus(s models.Status)
 }
 
 // MusicPlayer handles the audio playback lifecycle
 type MusicPlayer struct {
-	status     Status
-	prevVolume float64
-	ctrl       *beep.Ctrl
-	volumeCtrl *effects.Volume
-	streamer   beep.StreamSeekCloser
-	sampleRate beep.SampleRate
-	cfg        config.Config
+	status      models.Status
+	prevVolume  float64
+	ctrl        *beep.Ctrl
+	volumeCtrl  *effects.Volume
+	resampler   *beep.Resampler
+	streamer    beep.StreamSeekCloser
+	format      beep.Format
+	cfg         config.Config
+	initialized bool
+	session     string
 }
 
 // NewMusicPlayer creates and initializes a new music player instance
 func NewMusicPlayer(cfg config.Config) *MusicPlayer {
 	return &MusicPlayer{
-		status: Status{
+		status: models.Status{
 			Volume: 1.0,
 		},
 		cfg: cfg,
 	}
 }
 
-// GetStatus returns a snapshot of the current player status
-func (p *MusicPlayer) GetStatus() Status {
-	return p.status
+func (p *MusicPlayer) SetSession(s string) {
+	p.session = s
 }
 
-// SetStatus updates the player's internal status
-func (p *MusicPlayer) SetStatus(s Status) {
-	p.status = s
-}
+func (p *MusicPlayer) GetStatus() models.Status { return p.status }
+func (p *MusicPlayer) SetStatus(s models.Status) { p.status = s }
 
-// PlayTrack starts playback of the given track, selecting the appropriate decoder
-func (p *MusicPlayer) PlayTrack(t *Track) error {
+func (p *MusicPlayer) PlayTrack(t *models.Track) error {
 	if p.streamer != nil {
 		_ = p.streamer.Close()
+		p.streamer = nil
 	}
 
 	var streamer beep.StreamSeekCloser
@@ -99,86 +82,76 @@ func (p *MusicPlayer) PlayTrack(t *Track) error {
 
 	ext := strings.ToLower(filepath.Ext(t.Path))
 
-	// Strategy: Attempt native decoding first for efficiency
 	switch ext {
 	case ".mp3":
 		f, err = os.Open(t.Path)
-		if err == nil {
-			streamer, format, err = mp3.Decode(f)
-		}
+		if err == nil { streamer, format, err = mp3.Decode(f) }
 	case ".wav":
 		f, err = os.Open(t.Path)
-		if err == nil {
-			streamer, format, err = wav.Decode(f)
-		}
+		if err == nil { streamer, format, err = wav.Decode(f) }
 	case ".flac":
 		f, err = os.Open(t.Path)
-		if err == nil {
-			streamer, format, err = flac.Decode(f)
-		}
+		if err == nil { streamer, format, err = flac.Decode(f) }
 	case ".ogg", ".vorbis":
 		f, err = os.Open(t.Path)
-		if err == nil {
-			streamer, format, err = vorbis.Decode(f)
-		}
-	case ".txt":
-		streamer, format, err = p.playTextAsSpeech(t.Path)
+		if err == nil { streamer, format, err = vorbis.Decode(f) }
 	default:
-		// Fallback to ffmpeg for universal compatibility (M4A, AAC, etc.)
 		streamer, format, err = p.decodeWithFFmpeg(t.Path)
 	}
 
-	// Recovery Strategy: If native decoding fails, try FFmpeg as a last resort
-	if err != nil && ext != ".txt" {
-		if f != nil {
-			_ = f.Close()
-		}
-		if ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" {
-			streamer, format, err = p.decodeWithFFmpeg(t.Path)
-		}
-
-		if err != nil {
-			return fmt.Errorf("failed to decode track %s: %w", t.Path, err)
-		}
+	if err != nil {
+		if f != nil { _ = f.Close() }
+		streamer, format, err = p.decodeWithFFmpeg(t.Path)
 	}
 
-	p.sampleRate = format.SampleRate
-	p.streamer = streamer
-	p.status.IsDone = false
+	if err != nil || streamer == nil {
+		if err == nil { err = fmt.Errorf("decoding failed") }
+		return err
+	}
 
+	if !p.initialized {
+		err = speaker.Init(HardwareSampleRate, HardwareSampleRate.N(time.Second/10))
+		if err != nil {
+			return fmt.Errorf("failed to init speaker: %w", err)
+		}
+		p.initialized = true
+	}
+
+	p.format = format
+	p.status.IsDone = false
 	if streamer.Len() > 0 {
 		t.Length = format.SampleRate.D(streamer.Len()).Round(time.Second)
 	}
 
-	// Initialize speaker if this is the first track
-	if p.ctrl == nil {
-		err = speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/10))
-		if err != nil {
-			return fmt.Errorf("failed to initialize speaker: %w", err)
-		}
+	// Wrap with done detection
+	ds := &doneStreamer{
+		StreamSeekCloser: streamer,
+		onDone: func() {
+			p.status.IsDone = true
+			p.status.IsPlaying = false
+		},
 	}
 
-	p.ctrl = &beep.Ctrl{Streamer: streamer, Paused: false}
-
-	// Set up volume control effect
+	p.streamer = ds
+	p.resampler = beep.Resample(4, format.SampleRate, HardwareSampleRate, ds)
+	p.ctrl = &beep.Ctrl{Streamer: p.resampler, Paused: false}
 	p.volumeCtrl = &effects.Volume{
 		Streamer: p.ctrl,
 		Base:     2,
-		Volume:   0, // 0 means no change (multiplier = 1.0)
+		Volume:   0,
 	}
-	p.applyVolume()
-
+	
 	p.status.CurrentTrack = t
 	p.status.IsPlaying = true
 	p.status.Elapsed = 0
-
+	
+	p.applyVolume()
 	speaker.Clear()
 	speaker.Play(p.volumeCtrl)
 
 	return nil
 }
 
-// TogglePause toggles the play/pause state of the player
 func (p *MusicPlayer) TogglePause() {
 	if p.ctrl != nil {
 		p.ctrl.Paused = !p.ctrl.Paused
@@ -186,21 +159,13 @@ func (p *MusicPlayer) TogglePause() {
 	}
 }
 
-// SetVolume sets the player volume (0.0 to 1.0)
 func (p *MusicPlayer) SetVolume(v float64) {
-	if v < 0 {
-		v = 0
-	}
-	if v > 1 {
-		v = 1
-	}
+	if v < 0 { v = 0 }
+	if v > 1 { v = 1 }
 	p.status.Volume = v
-	if !p.status.IsMuted {
-		p.applyVolume()
-	}
+	if !p.status.IsMuted { p.applyVolume() }
 }
 
-// ToggleMute toggles the mute state
 func (p *MusicPlayer) ToggleMute() {
 	if p.status.IsMuted {
 		p.status.IsMuted = false
@@ -215,71 +180,46 @@ func (p *MusicPlayer) ToggleMute() {
 
 func (p *MusicPlayer) applyVolume() {
 	if p.volumeCtrl != nil {
-		// Beep's volume is logarithmic. Volume 0 is 1.0x, -1 is 0.5x, etc.
-		// We map 0.0-1.0 to something reasonable.
-		if p.status.Volume == 0 {
-			p.volumeCtrl.Volume = -10 // Close to silent
+		if p.status.Volume <= 0.01 {
+			p.volumeCtrl.Volume = -10 
 		} else {
 			p.volumeCtrl.Volume = math.Log2(p.status.Volume)
 		}
 	}
 }
 
-// Seek moves the playback position by the given duration
 func (p *MusicPlayer) Seek(d time.Duration) {
-	if p.streamer == nil {
-		return
-	}
-
-	newPos := p.streamer.Position() + p.sampleRate.N(d)
-	if newPos < 0 {
-		newPos = 0
-	}
-	if newPos >= p.streamer.Len() {
-		newPos = p.streamer.Len() - 1
-	}
-
+	if p.streamer == nil { return }
+	newPos := p.streamer.Position() + HardwareSampleRate.N(d)
+	if newPos < 0 { newPos = 0 }
+	if newPos >= p.streamer.Len() { newPos = p.streamer.Len() - 1 }
 	speaker.Lock()
 	_ = p.streamer.Seek(newPos)
 	speaker.Unlock()
 }
 
-// Update refreshes the player's internal state (elapsed time, completion)
 func (p *MusicPlayer) Update() {
 	if p.status.IsPlaying && p.streamer != nil {
 		pos := p.streamer.Position()
-		p.status.Elapsed = p.sampleRate.D(pos)
-
-		if pos >= p.streamer.Len() {
+		p.status.Elapsed = p.format.SampleRate.D(pos)
+		
+		// If Len() is known, use it as a safety check, but otherwise rely on callback
+		if p.streamer.Len() > 0 && pos >= p.streamer.Len() {
 			p.status.IsDone = true
 			p.status.IsPlaying = false
 		}
 	}
 }
 
-// SetTTSParams updates the TTS settings for the player
-func (p *MusicPlayer) SetTTSParams(lang string, speaker int) {
-	p.cfg.TTSLanguage = lang
-	p.cfg.TTSVoice = fmt.Sprintf("%d", speaker) // Using speaker ID as voice for now
+type doneStreamer struct {
+	beep.StreamSeekCloser
+	onDone func()
 }
 
-// playTextAsSpeech reads a text file and converts it to speech using the TTS engine
-func (p *MusicPlayer) playTextAsSpeech(path string) (beep.StreamSeekCloser, beep.Format, error) {
-	if !p.cfg.TTSEnabled {
-		return nil, beep.Format{}, fmt.Errorf("TTS is disabled in config")
+func (s *doneStreamer) Stream(samples [][2]float64) (n int, ok bool) {
+	n, ok = s.StreamSeekCloser.Stream(samples)
+	if !ok {
+		s.onDone()
 	}
-
-	content, err := ReadTextFile(path)
-	if err != nil {
-		return nil, beep.Format{}, fmt.Errorf("failed to read text file: %w", err)
-	}
-
-	model, lexicon, tokens := GetTTSModelPaths(p.cfg.TTSLanguage)
-	tts, err := NewTTSPlayer(model, lexicon, tokens)
-	if err != nil {
-		return nil, beep.Format{}, fmt.Errorf("failed to initialize TTS engine: %w", err)
-	}
-	defer tts.Close()
-
-	return tts.GenerateAudio(content, 0) // TODO: Support selectable speaker IDs
+	return n, ok
 }

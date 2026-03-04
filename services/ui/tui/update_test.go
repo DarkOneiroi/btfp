@@ -6,14 +6,14 @@
 package tui
 
 import (
-	"btfp/services/core/player"
+	"btfp/internal/models"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestUpdateQuit(t *testing.T) {
-	m := NewModel("")
+	m := NewModel("", "music")
 
 	// 1. Test Server Quit Signal (ShouldQuit)
 	msg := serverStateMsg{ShouldQuit: true}
@@ -31,7 +31,7 @@ func TestUpdateQuit(t *testing.T) {
 }
 
 func TestUpdateAlwaysPassesToLists(t *testing.T) {
-	m := NewModel("")
+	m := NewModel("", "music")
 	m.view = viewPlayer // Set to view that is NOT library
 
 	// Create a dummy library message
@@ -48,11 +48,12 @@ func TestUpdateAlwaysPassesToLists(t *testing.T) {
 }
 
 func TestOptimisticPlaylistUpdates(t *testing.T) {
-	m := NewModel("")
+	m := NewModel("", "music")
 	m.view = viewLibrary
 
 	// Mock a track selection
-	track := player.Track{Title: "Test Song", Path: "/test.mp3"}
+	track := models.Track{
+Title: "Test Song", Path: "/test.mp3"}
 
 	// Simulate "Enter" key on a file (this usually triggers handleEnter)
 	// We'll test the core logic: playlist should be updated immediately
@@ -69,10 +70,11 @@ func TestOptimisticPlaylistUpdates(t *testing.T) {
 
 func TestCmdPlayTrackLogic(t *testing.T) {
 	// This tests that the model correctly transitions state when a track is played
-	m := NewModel("library")
+	m := NewModel("library", "music")
 
 	// Simulate adding and playing a track
-	track := player.Track{Title: "King Nothing", Path: "/metallica/king_nothing.mp3"}
+	track := models.Track{
+Title: "King Nothing", Path: "/metallica/king_nothing.mp3"}
 	m.playlist = append(m.playlist, track)
 	m.playingIdx = 0
 	m.view = viewPlayer // handleEnter sets this

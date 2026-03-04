@@ -9,21 +9,28 @@ import (
 	"btfp/internal/ipc-shared"
 	"btfp/services/visualization/visualizations"
 	"encoding/gob"
+	"flag"
 	"fmt"
+	"math"
+	"math/rand"
 	"net"
 	"os"
 )
 
 func main() {
-	_ = os.Remove(ipc.VizSocketPath)
-	listener, err := net.Listen("unix", ipc.VizSocketPath)
+	session := flag.String("session", "music", "Session name")
+	flag.Parse()
+
+	socketPath := ipc.GetSocketPath("viz", *session)
+	_ = os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		fmt.Printf("Failed to start visualization service: %v\n", err)
+		fmt.Printf("Failed to start viz service: %v\n", err)
 		return
 	}
 	defer func() { _ = listener.Close() }()
 
-	fmt.Println("Visualization Service started on", ipc.VizSocketPath)
+	fmt.Printf("Visualization Service [%s] started on %s\n", *session, socketPath)
 
 	for {
 		conn, err := listener.Accept()
@@ -51,13 +58,32 @@ func handleClient(conn net.Conn) {
 			payload, _ := cmd.Payload.(map[string]interface{})
 			w, _ := payload["width"].(int)
 			h, _ := payload["height"].(int)
-			levels, _ := payload["levels"].([]float64)
+			isPlaying, _ := payload["isPlaying"].(bool)
+			volume, _ := payload["volume"].(float64)
 			pattern, _ := payload["pattern"].(int)
+			colorMode, _ := payload["colorMode"].(int)
+			palette, _ := payload["palette"].(int)
+			currTime, _ := payload["time"].(float64)
 
-			if frame == nil || frame.Width != w || frame.Height != h {
+			if w <= 0 { w = 80 }
+			if h <= 0 { h = 20 }
+
+			// FORCE RESET on pattern change or if dimensions changed significantly
+			if frame == nil || frame.Width != w || frame.Height != h || int(frame.PatternType) != pattern {
 				frame = visualizations.NewFrame(w, h, visualizations.PatternType(pattern))
 			}
 
+			levels := make([]float64, 32)
+			if isPlaying {
+				for i := range levels {
+					levels[i] = (math.Sin(currTime*float64(i+1)*0.5)+1.0)*0.3 + rand.Float64()*0.2
+					levels[i] *= volume
+				}
+			}
+
+			frame.PatternType = visualizations.PatternType(pattern)
+			frame.ColorMode = visualizations.ColorMode(colorMode)
+			frame.PaletteType = visualizations.PaletteType(palette)
 			frame.AudioLevels = levels
 			frame.GeneratePattern(levels[0])
 			rendered := frame.Render(false)

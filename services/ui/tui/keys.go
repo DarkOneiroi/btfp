@@ -7,103 +7,124 @@ package tui
 
 import (
 	"btfp/internal/ipc-shared"
-	"btfp/services/visualization/visualizations"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// handleKeyPress processes keyboard input and returns an optional command
-func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
-	// If any list is filtering, let the list handle all keys
-	if m.libList.FilterState() == list.Filtering || m.playList.FilterState() == list.Filtering {
-		return nil
-	}
-
+// processKey handles model-level shortcuts and returns if the key was consumed
+func (m *Model) processKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
 	var cmds []tea.Cmd
 
 	switch key {
 	case "q", "ctrl+c":
 		m.sendCommand(ipc.Command{Type: ipc.CmdQuit})
-		return tea.Quit
-
-	case "backspace":
-		m.handleBackspace(&cmds)
+		return tea.Quit, true
 
 	case "tab":
 		m.handleTab()
+		return nil, true
+
+	case "backspace":
+		if m.view == viewLibrary {
+			m.handleBackspace(&cmds)
+			return tea.Batch(cmds...), true
+		}
 
 	case " ":
-		m.handleSpace()
+		if m.view == viewLibrary {
+			m.handleSpace()
+			return nil, true
+		}
+		m.sendCommand(ipc.Command{Type: ipc.CmdPause})
+		return nil, true
 
 	case "a":
-		m.handleAddTrack(&cmds)
+		if m.view == viewLibrary {
+			m.handleAddTrack(&cmds)
+			return tea.Batch(cmds...), true
+		}
 
 	case "enter":
 		m.handleEnter(&cmds)
+		return tea.Batch(cmds...), true
+
+	case "up", "down":
+		if m.view == viewPlayer {
+			if key == "up" {
+				m.adjustVolume(0.1)
+			} else {
+				m.adjustVolume(-0.1)
+			}
+			return nil, true
+		}
 
 	case "c", "i", "p":
 		m.handleVizKeys(key)
+		return nil, true
 
 	case "v":
-		if m.view == viewPlayer || m.view == viewViz {
-			m.cycleBGMode()
+		m.cycleBGMode()
+		if m.bgMode != bgVisualization {
+			m.vizData = ""
+			m.vizPending = false
 		}
+		return nil, true
 
 	case "h", "?":
 		m.showLegend = !m.showLegend
+		return nil, true
 
 	case "+", "=":
 		m.adjustVolume(0.1)
+		return nil, true
 
 	case "-", "_":
 		m.adjustVolume(-0.1)
+		return nil, true
 
 	case "m":
 		m.toggleMute()
+		return nil, true
 
 	case "l", "right":
-		m.seek(5 * time.Second)
+		if m.view == viewPlayer {
+			m.seek(5 * time.Second)
+			return nil, true
+		}
 
 	case "left":
-		m.seek(-5 * time.Second)
+		if m.view == viewPlayer {
+			m.seek(-5 * time.Second)
+			return nil, true
+		}
 
 	case "n":
 		m.nextTrack(&cmds)
+		return tea.Batch(cmds...), true
 
 	case "b":
 		m.prevTrack(&cmds)
-
-	case "t":
-		m.toggleTTSLanguage()
-
-	case "s":
-		m.cycleTTSSpeaker()
+		return tea.Batch(cmds...), true
 	}
 
-	if len(cmds) > 0 {
-		return tea.Batch(cmds...)
-	}
-	return nil
+	return nil, false
 }
 
 func (m *Model) handleBackspace(cmds *[]tea.Cmd) {
-	if m.view == viewLibrary {
-		home, _ := os.UserHomeDir()
-		if m.currentDir != filepath.Join(home, "Music") {
-			m.currentDir = filepath.Dir(m.currentDir)
-			*cmds = append(*cmds, m.loadDirectory(m.currentDir))
-		}
+	home, _ := os.UserHomeDir()
+	if m.currentDir != filepath.Join(home, "Music") {
+		m.currentDir = filepath.Dir(m.currentDir)
+		*cmds = append(*cmds, m.loadDirectory(m.currentDir))
 	}
 }
 
 func (m *Model) handleTab() {
 	if !m.lockedView {
-		m.view = (m.view + 1) % 4 // Cycle through all 4 views
+		m.view = (m.view + 1) % 4
 		if m.view == viewPlaylist {
 			m.updatePlaylistItems()
 		}
@@ -111,35 +132,23 @@ func (m *Model) handleTab() {
 }
 
 func (m *Model) handleSpace() {
-	if m.view == viewLibrary {
-		if sel, ok := m.libList.SelectedItem().(item); ok && sel.title != ".." {
-			m.selectedPaths[sel.path] = !m.selectedPaths[sel.path]
-			its := m.libList.Items()
-			for i, it := range its {
-				itm := it.(item)
-				if itm.path == sel.path {
-					itm.selected = m.selectedPaths[sel.path]
-					its[i] = itm
-				}
-			}
-			m.libList.SetItems(its)
-		}
-	} else {
-		m.sendCommand(ipc.Command{Type: ipc.CmdPause})
+	if sel, ok := m.libList.SelectedItem().(item); ok && sel.title != ".." {
+		m.selectedPaths[sel.path] = !m.selectedPaths[sel.path]
+		idx := m.libList.Index()
+		itm := sel
+		itm.selected = m.selectedPaths[sel.path]
+		m.libList.SetItem(idx, itm)
 	}
 }
 
 func (m *Model) handleAddTrack(cmds *[]tea.Cmd) {
-	if m.view == viewLibrary {
-		for p, s := range m.selectedPaths {
-			if s {
-				m.addPathToPlaylist(p)
-			}
+	for p, s := range m.selectedPaths {
+		if s {
+			m.AddPathToPlaylist(p)
 		}
-		m.selectedPaths = make(map[string]bool)
-		m.syncPlaylist()
-		*cmds = append(*cmds, m.loadDirectory(m.currentDir))
 	}
+	m.selectedPaths = make(map[string]bool)
+	m.syncPlaylist()
 }
 
 func (m *Model) handleEnter(cmds *[]tea.Cmd) {
@@ -151,7 +160,9 @@ func (m *Model) handleEnter(cmds *[]tea.Cmd) {
 			} else {
 				track := m.getTrackMetadata(sel.path)
 				m.sendCommand(ipc.Command{Type: ipc.CmdPlayTrack, Payload: track})
-				m.view = viewPlayer
+				if !m.multiWindow {
+					m.view = viewPlayer
+				}
 			}
 		}
 	} else if m.view == viewPlaylist {
@@ -163,23 +174,22 @@ func (m *Model) handleEnter(cmds *[]tea.Cmd) {
 }
 
 func (m *Model) handleVizKeys(key string) {
-	if (m.view == viewPlayer || m.view == viewViz) && m.vizFrame != nil {
-		switch key {
-		case "c":
-			m.preset = (m.preset + 1) % int(visualizations.PatternTypeCount)
-		case "i":
-			m.colorMode = (m.colorMode + 1) % int(visualizations.ColorModeCount)
-		case "p":
-			m.palette = (m.palette + 1) % int(visualizations.PaletteTypeCount)
-		}
+	switch key {
+	case "c":
+		m.preset = (m.preset + 1) % 10
+	case "i":
+		m.colorMode = (m.colorMode + 1) % 5
+	case "p":
+		m.palette = (m.palette + 1) % 15
 	}
+	m.vizPending = false
 }
 
 func (m *Model) adjustVolume(delta float64) {
-	// We don't have current status locally easily, so we just send relative?
-	// The server handles absolute volume. TUI should probably just send CmdVolumeUp/Down
-	// or track the last known volume from server state.
-	m.sendCommand(ipc.Command{Type: ipc.CmdVolume, Payload: delta})
+	m.volume += delta
+	if m.volume > 1.0 { m.volume = 1.0 }
+	if m.volume < 0.0 { m.volume = 0.0 }
+	m.sendCommand(ipc.Command{Type: ipc.CmdVolume, Payload: m.volume})
 }
 
 func (m *Model) toggleMute() {
@@ -198,15 +208,3 @@ func (m *Model) prevTrack(cmds *[]tea.Cmd) {
 	m.sendCommand(ipc.Command{Type: ipc.CmdPrev})
 }
 
-func (m *Model) toggleTTSLanguage() {
-	lang := "en"
-	if m.cfg.TTSLanguage == "en" {
-		lang = "cs"
-	}
-	m.sendCommand(ipc.Command{Type: ipc.CmdTTSLanguage, Payload: lang})
-}
-
-func (m *Model) cycleTTSSpeaker() {
-	speaker := (int(m.cfg.TTSSpeed) + 1) % 2 // Assume 2 speakers for now
-	m.sendCommand(ipc.Command{Type: ipc.CmdTTSSpeaker, Payload: speaker})
-}

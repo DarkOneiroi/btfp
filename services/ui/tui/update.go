@@ -6,15 +6,10 @@
 package tui
 
 import (
-	"btfp/internal/ipc-shared"
-	"btfp/internal/utils"
-	"btfp/services/core/player"
-	"btfp/services/visualization/visualizations"
-	"encoding/gob"
-	"net"
+	"btfp/internal/models"
 	"path/filepath"
-	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -27,10 +22,38 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ShouldQuit {
 			return m, tea.Quit
 		}
-		m.handleServerState(msg, &cmds)
+		newTrackStarted := false
+		if msg.CurrentTrack != nil && (m.currTrack == nil || m.currTrack.Path != msg.CurrentTrack.Path) {
+			newTrackStarted = true
+		}
+
+		m.handleServerState(msg)
+
+		if newTrackStarted {
+			cmds = append(cmds, m.loadLyrics(m.currTrack.Path), m.syncMetadataAndArt(m.currTrack.Path))
+		}
+		cmds = append(cmds, m.listenToServer())
+
+	case vizFrameMsg:
+		m.vizData = string(msg)
+		m.vizPending = false
+
+	case vizTickMsg:
+		if m.bgMode != bgVisualization {
+			m.vizData = ""
+			m.vizPending = false
+		} else if !m.vizPending {
+			m.vizPending = true
+			cmds = append(cmds, m.requestVizFrame(m.width, m.height, m.isPlaying, m.isMuted, m.volume, m.preset, m.colorMode, m.palette, m.bgMode, m.startTime))
+		}
+		cmds = append(cmds, vizTick())
 
 	case libraryMsg:
+		oldIdx := m.libList.Index()
 		m.libList.SetItems(msg)
+		if oldIdx < len(m.libList.Items()) {
+			m.libList.Select(oldIdx)
+		}
 
 	case artDownloadedMsg:
 		delete(m.artCache, filepath.Dir(string(msg)))
@@ -39,103 +62,76 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case lyricsDownloadedMsg:
-		m.handleLyricsDownloaded(msg, &cmds)
-
-	case vizTickMsg:
-		m.handleVizTick(&cmds)
+		m.currentLyrics = msg.lyrics
 
 	case tea.KeyMsg:
-		cmd := m.handleKeyPress(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
+		if m.libList.FilterState() == list.Filtering {
+			var listCmd tea.Cmd
+			m.libList, listCmd = m.libList.Update(msg)
+			return m, listCmd
+		}
+		if m.playList.FilterState() == list.Filtering {
+			var listCmd tea.Cmd
+			m.playList, listCmd = m.playList.Update(msg)
+			return m, listCmd
 		}
 
+		modelCmd, handled := m.processKey(msg)
+		if handled {
+			return m, modelCmd
+		}
+
+		var listCmd tea.Cmd
+		if m.view == viewLibrary {
+			m.libList, listCmd = m.libList.Update(msg)
+			if sel, ok := m.libList.SelectedItem().(item); ok {
+				cmds = append(cmds, m.syncMetadataAndArt(sel.path))
+			}
+		} else if m.view == viewPlaylist {
+			m.playList, listCmd = m.playList.Update(msg)
+			if sel, ok := m.playList.SelectedItem().(item); ok {
+				cmds = append(cmds, m.syncMetadataAndArt(sel.path))
+			}
+		}
+		return m, tea.Batch(append(cmds, listCmd)...)
+
 	case tea.WindowSizeMsg:
-		m.handleWindowResize(msg)
+		m.width, m.height = msg.Width, msg.Height
+		m.libList.SetSize(m.width/3-2, m.height-2)
+		m.playList.SetSize(m.width/2-2, m.height-2)
 
 	case tickMsg:
-		m.handlePlaybackTick(&cmds)
+		cmds = append(cmds, tick())
 
 	case errMsg:
-		return m, tea.Quit
+		m.vizPending = false
 	}
-
-	// ALWAYS update active lists so they handle cursor movement, filtering, etc.
-	var cmdLib, cmdPlay tea.Cmd
-	m.libList, cmdLib = m.libList.Update(msg)
-	m.playList, cmdPlay = m.playList.Update(msg)
-	cmds = append(cmds, cmdLib, cmdPlay)
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) handleServerState(msg serverStateMsg, cmds *[]tea.Cmd) {
+func (m *Model) handleServerState(msg serverStateMsg) {
 	m.playingIdx = msg.PlayingIdx
-	m.playlist = make([]player.Track, len(msg.Playlist))
+	m.playlist = make([]models.Track, len(msg.Playlist))
 	for i, t := range msg.Playlist {
-		m.playlist[i] = player.Track{Title: t.Title, Artist: t.Artist, Path: t.Path, Length: t.Length}
+		m.playlist[i] = models.Track{Title: t.Title, Artist: t.Artist, Path: t.Path, Length: t.Length}
 	}
+
+	if msg.CurrentTrack != nil {
+		m.currTrack = &models.Track{
+			Title:  msg.CurrentTrack.Title,
+			Artist: msg.CurrentTrack.Artist,
+			Path:   msg.CurrentTrack.Path,
+			Length: msg.CurrentTrack.Length,
+		}
+	} else {
+		m.currTrack = nil
+	}
+
+	m.isPlaying = msg.IsPlaying
+	m.isMuted = msg.IsMuted
+	m.volume = msg.Volume
+	m.elapsed = msg.Elapsed
 
 	m.syncPlaylist()
-
-	m.cfg.TTSLanguage = msg.TTSLanguage
-	m.cfg.TTSSpeed = float64(msg.TTSSpeaker) // Temp mapping back
-
-	*cmds = append(*cmds, m.listenToServer())
-}
-
-func (m *Model) handleLyricsDownloaded(msg lyricsDownloadedMsg, _ *[]tea.Cmd) {
-	m.currentLyrics = msg.lyrics
-	if m.view == viewPlayer && (m.bgMode == bgEmpty || m.bgMode == bgVisualization) {
-		m.bgMode = bgKaraoke
-	}
-
-	base := strings.TrimSuffix(msg.path, ".lrc")
-	for _, ext := range utils.SupportedExtensions {
-		delete(m.metadataCache, base+ext)
-	}
-}
-
-func (m *Model) handleVizTick(cmds *[]tea.Cmd) {
-	if (m.view == viewPlayer || m.view == viewViz) && (m.bgMode == bgVisualization || m.bgMode == bgEQBars) {
-		if m.vizConn == nil {
-			conn, err := net.Dial("unix", ipc.VizSocketPath)
-			if err == nil {
-				m.vizConn = conn
-			}
-		}
-
-		if m.vizConn != nil {
-			enc := gob.NewEncoder(m.vizConn)
-			dec := gob.NewDecoder(m.vizConn)
-
-			levels := make([]float64, 32)
-			pattern := m.preset
-			if m.bgMode == bgEQBars {
-				pattern = int(visualizations.PatternEQ)
-			}
-
-			payload := map[string]interface{}{
-				"width":   m.width,
-				"height":  m.height,
-				"levels":  levels,
-				"pattern": pattern,
-			}
-
-			_ = enc.Encode(ipc.Command{Type: ipc.CmdVizGenerate, Payload: payload})
-			var rendered string
-			_ = dec.Decode(&rendered)
-		}
-	}
-	*cmds = append(*cmds, vizTick())
-}
-
-func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) {
-	m.width, m.height = msg.Width, msg.Height
-	m.libList.SetSize(m.width/3-2, m.height-2)
-	m.playList.SetSize(m.width/2-2, m.height-2)
-}
-
-func (m *Model) handlePlaybackTick(cmds *[]tea.Cmd) {
-	*cmds = append(*cmds, tick())
 }

@@ -9,6 +9,7 @@ import (
 	"btfp/internal/ipc-shared"
 	"btfp/internal/utils"
 	"encoding/gob"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -19,26 +20,30 @@ import (
 )
 
 func main() {
-	_ = os.Remove(ipc.LibrarySocketPath)
-	listener, err := net.Listen("unix", ipc.LibrarySocketPath)
+	session := flag.String("session", "music", "Session name")
+	flag.Parse()
+
+	socketPath := ipc.GetSocketPath("library", *session)
+	_ = os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		fmt.Printf("Failed to start library service: %v\n", err)
 		return
 	}
 	defer func() { _ = listener.Close() }()
 
-	fmt.Println("Library Service started on", ipc.LibrarySocketPath)
+	fmt.Printf("Library Service [%s] started on %s\n", *session, socketPath)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
 		}
-		go handleClient(conn)
+		go handleClient(conn, *session)
 	}
 }
 
-func handleClient(conn net.Conn) {
+func handleClient(conn net.Conn, session string) {
 	defer func() { _ = conn.Close() }()
 	dec := gob.NewDecoder(conn)
 	enc := gob.NewEncoder(conn)
@@ -52,7 +57,7 @@ func handleClient(conn net.Conn) {
 		switch cmd.Type {
 		case ipc.CmdLibScan:
 			path, _ := cmd.Payload.(string)
-			entries := scanDirectory(path)
+			entries := scanDirectory(path, session)
 			_ = enc.Encode(ipc.MsgLibEntries{Path: path, Entries: entries})
 
 		case ipc.CmdLibGetMetadata:
@@ -63,7 +68,7 @@ func handleClient(conn net.Conn) {
 	}
 }
 
-func scanDirectory(path string) []ipc.LibEntry {
+func scanDirectory(path string, session string) []ipc.LibEntry {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil
@@ -73,7 +78,10 @@ func scanDirectory(path string) []ipc.LibEntry {
 	for _, entry := range entries {
 		info, _ := entry.Info()
 		fullPath := filepath.Join(path, entry.Name())
-		if entry.IsDir() || utils.IsSupportedAudioFile(entry.Name()) {
+		
+		isSupported := utils.IsSupportedAudioFile(entry.Name()) && strings.ToLower(filepath.Ext(entry.Name())) != ".txt"
+
+		if entry.IsDir() || isSupported {
 			desc := "Dir"
 			if !entry.IsDir() {
 				desc = fmt.Sprintf("%.1f MB", float64(info.Size())/1024/1024)
@@ -92,6 +100,7 @@ func scanDirectory(path string) []ipc.LibEntry {
 func getTrackMetadata(path string) ipc.TrackInfo {
 	fileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	dir := filepath.Dir(path)
+	albumName := filepath.Base(dir)
 	artistName := filepath.Base(filepath.Dir(dir))
 
 	track := ipc.TrackInfo{
@@ -104,6 +113,7 @@ func getTrackMetadata(path string) ipc.TrackInfo {
 		defer func() { _ = tag.Close() }()
 		artist := tag.GetTextFrame("TPE1").Text
 		title := tag.GetTextFrame("TIT2").Text
+		album := tag.GetTextFrame("TALB").Text
 
 		if artist != "" {
 			track.Artist = artist
@@ -111,10 +121,17 @@ func getTrackMetadata(path string) ipc.TrackInfo {
 		if title != "" {
 			track.Title = title
 		}
+		if album != "" {
+			track.Album = album
+		}
 	}
 
 	if track.Artist == "" && artistName != "Music" && artistName != "." {
 		track.Artist = artistName
+	}
+
+	if track.Album == "" && albumName != "Music" && albumName != "." {
+		track.Album = albumName
 	}
 
 	if track.Artist == "" {

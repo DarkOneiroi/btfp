@@ -6,7 +6,7 @@
 package tui
 
 import (
-	"btfp/services/core/player"
+	"btfp/internal/models"
 	"reflect"
 	"testing"
 	"time"
@@ -107,7 +107,7 @@ func TestCleanString(t *testing.T) {
 
 func TestPlaylistCounts(t *testing.T) {
 	m := &Model{
-		playlist: []player.Track{
+		playlist: []models.Track{
 			{Path: "/home/user/Music/A/1.mp3"},
 			{Path: "/home/user/Music/A/2.mp3"},
 			{Path: "/home/user/Music/B/1.mp3"},

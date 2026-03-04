@@ -6,77 +6,54 @@
 package ipc
 
 import (
-	"btfp/services/core/player"
+	"btfp/internal/models"
 	"encoding/gob"
+	"fmt"
 	"net"
 	"time"
 )
 
-// Socket paths for different services
+// Instance types
 const (
-	CoreSocketPath     = "/tmp/btfp-core.sock"
-	LibrarySocketPath  = "/tmp/btfp-library.sock"
-	FetcherSocketPath  = "/tmp/btfp-fetcher.sock"
-	TTSSocketPath      = "/tmp/btfp-tts.sock"
-	VizSocketPath      = "/tmp/btfp-viz.sock"
-	PlaylistSocketPath = "/tmp/btfp-playlist.sock"
+	ModeMusic = "music"
 )
 
-// SocketPath is maintained for backward compatibility (points to Core)
-const SocketPath = CoreSocketPath
+// GetSocketPath returns a unique socket path for a given service and session
+func GetSocketPath(service, session string) string {
+	return fmt.Sprintf("/tmp/btfp-%s-%s.sock", session, service)
+}
 
 // CommandType defines the available IPC commands
 type CommandType int
 
 const (
-	// CmdPlay starts or resumes playback
+	// Core Commands
 	CmdPlay CommandType = iota
-	// CmdPause pauses playback
 	CmdPause
-	// CmdNext skips to the next track
 	CmdNext
-	// CmdPrev skips to the previous track
 	CmdPrev
-	// CmdStop stops playback
 	CmdStop
-	// CmdSeek seeks within the current track
 	CmdSeek
-	// CmdVolume sets the playback volume
 	CmdVolume
-	// CmdMute toggles mute state
 	CmdMute
-	// CmdPlayTrack adds and immediately plays a track
 	CmdPlayTrack
-	// CmdQuit terminates the server and all clients
 	CmdQuit
 
-	// CmdLibScan requests a directory scan from the Library service
+	// Library Commands
 	CmdLibScan
-	// CmdLibGetMetadata requests track metadata from the Library service
 	CmdLibGetMetadata
 
-	// CmdFetchLyrics requests lyrics from the Fetcher service
+	// Fetcher Commands
 	CmdFetchLyrics
-	// CmdFetchArt requests album art from the Fetcher service
 	CmdFetchArt
 
-	// CmdTTSGenerate requests audio generation from the TTS service
-	CmdTTSGenerate
-	// CmdTTSLanguage changes the TTS language
-	CmdTTSLanguage
-	// CmdTTSSpeaker changes the TTS speaker ID
-	CmdTTSSpeaker
-
-	// CmdVizGenerate requests a visualization frame from the Viz service
+	// Visualization Commands
 	CmdVizGenerate
 
-	// CmdPlaylistAdd adds a track to the playlist managed by the Playlist service
+	// Playlist Commands
 	CmdPlaylistAdd
-	// CmdPlaylistRemove removes a track from the playlist
 	CmdPlaylistRemove
-	// CmdPlaylistGet retrieves the current playlist
 	CmdPlaylistGet
-	// CmdPlaylistClear clears the entire playlist
 	CmdPlaylistClear
 )
 
@@ -90,6 +67,7 @@ type Command struct {
 type TrackInfo struct {
 	Title  string
 	Artist string
+	Album  string
 	Path   string
 	Length time.Duration
 }
@@ -105,10 +83,6 @@ type PlayerState struct {
 	PlayingIdx    int
 	ShouldQuit    bool
 	ActiveClients int
-
-	// TTS State
-	TTSLanguage string
-	TTSSpeaker  int
 }
 
 // MsgLibEntries is the response from Library service
@@ -130,33 +104,25 @@ type MsgFetchResult struct {
 	Content string // lyrics text or art path
 }
 
-// MsgTTSResult is the response from TTS service
-type MsgTTSResult struct {
-	Path    string
-	Samples []float32
-	Rate    int
-}
-
 func init() {
-	// Register types for gob encoding of interface{}
 	gob.Register(time.Duration(0))
 	gob.Register(0)
-	gob.Register(player.Track{})
+	gob.Register(models.Track{})
 	gob.Register(TrackInfo{})
 	gob.Register([]TrackInfo{})
 	gob.Register(MsgLibEntries{})
 	gob.Register(MsgFetchResult{})
-	gob.Register(MsgTTSResult{})
 	gob.Register([]LibEntry{})
+	gob.Register(map[string]interface{}{})
+	gob.Register([]string{})
+	gob.Register([]float64{})
 }
 
-// SendCommand sends a command over the given connection
 func SendCommand(conn net.Conn, cmd Command) error {
 	enc := gob.NewEncoder(conn)
 	return enc.Encode(cmd)
 }
 
-// ReceiveState waits for and decodes a PlayerState from the connection
 func ReceiveState(conn net.Conn) (PlayerState, error) {
 	dec := gob.NewDecoder(conn)
 	var state PlayerState

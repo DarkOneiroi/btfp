@@ -45,11 +45,8 @@ func (m *Model) View() string {
 
 func (m *Model) getBackground() string {
 	switch m.bgMode {
-	case bgVisualization, bgEQBars:
-		if m.vizFrame == nil {
-			return ""
-		}
-		return m.vizFrame.Render(false)
+	case bgVisualization:
+		return m.vizData
 	case bgKaraoke:
 		return m.renderKaraoke()
 	case bgImage:

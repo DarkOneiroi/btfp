@@ -6,25 +6,26 @@
 package player
 
 import (
+	"btfp/internal/models"
 	"time"
 )
 
-// MockPlayer is a mock implementation of the Player interface for testing.
+// MockPlayer is a mock implementation of the Player interface for testing
 type MockPlayer struct {
-	status Status
+	status models.Status
 }
 
-// NewMockPlayer creates a new mock player instance.
+// NewMockPlayer creates a new mock player instance
 func NewMockPlayer() *MockPlayer {
 	return &MockPlayer{
-		status: Status{
+		status: models.Status{
 			Volume: 1.0,
 		},
 	}
 }
 
 // PlayTrack is a mock implementation
-func (m *MockPlayer) PlayTrack(t *Track) error {
+func (m *MockPlayer) PlayTrack(t *models.Track) error {
 	m.status.CurrentTrack = t
 	m.status.IsPlaying = true
 	return nil
@@ -58,12 +59,12 @@ func (m *MockPlayer) Update() {
 }
 
 // GetStatus is a mock implementation
-func (m *MockPlayer) GetStatus() Status {
+func (m *MockPlayer) GetStatus() models.Status {
 	return m.status
 }
 
 // SetStatus is a mock implementation
-func (m *MockPlayer) SetStatus(s Status) {
+func (m *MockPlayer) SetStatus(s models.Status) {
 	m.status = s
 }
 

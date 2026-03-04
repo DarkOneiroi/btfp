@@ -7,8 +7,11 @@ package player
 
 import (
 	"btfp/internal/config"
+	"btfp/internal/models"
 	"testing"
 	"time"
+
+	"github.com/gopxl/beep"
 )
 
 func TestMusicPlayerInitialization(t *testing.T) {
@@ -51,7 +54,7 @@ func TestVolumeControls(t *testing.T) {
 }
 
 func TestTrackMetadata(t *testing.T) {
-	track := Track{
+	track := models.Track{
 		Title:  "King Nothing",
 		Artist: "Metallica",
 		Path:   "/path/to/song.mp3",

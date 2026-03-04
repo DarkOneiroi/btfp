@@ -24,10 +24,17 @@ import (
 // --- Library & Navigation Helpers ---
 
 func (m *Model) loadDirectory(path string) tea.Cmd {
+	selected := make(map[string]bool)
+	for k, v := range m.selectedPaths { selected[k] = v }
+	counts := make(map[string]int)
+	for k, v := range m.playlistCounts { counts[k] = v }
+	session := m.session
+
 	return func() tea.Msg {
-		conn, err := net.Dial("unix", ipc.LibrarySocketPath)
+		socketPath := ipc.GetSocketPath("library", session)
+		conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
 		if err != nil {
-			return errMsg(err)
+			return nil 
 		}
 		defer func() { _ = conn.Close() }()
 
@@ -38,7 +45,7 @@ func (m *Model) loadDirectory(path string) tea.Cmd {
 
 		var result ipc.MsgLibEntries
 		if err := dec.Decode(&result); err != nil {
-			return errMsg(err)
+			return nil
 		}
 
 		var items []list.Item
@@ -48,23 +55,13 @@ func (m *Model) loadDirectory(path string) tea.Cmd {
 		}
 
 		for _, entry := range result.Entries {
-			inPlaylist := false
-			if !entry.IsDir {
-				if m.playlistCounts[entry.Path] > 0 {
-					inPlaylist = true
-				}
-			} else {
-				if cnt := m.playlistCounts[entry.Path]; cnt > 0 {
-					inPlaylist = true
-				}
-			}
 			items = append(items, item{
 				title:      entry.Title,
 				desc:       entry.Desc,
 				path:       entry.Path,
 				isDir:      entry.IsDir,
-				selected:   m.selectedPaths[entry.Path],
-				inPlaylist: inPlaylist,
+				selected:   selected[entry.Path],
+				inPlaylist: counts[entry.Path] > 0,
 			})
 		}
 		return libraryMsg(items)
@@ -73,8 +70,21 @@ func (m *Model) loadDirectory(path string) tea.Cmd {
 
 func (m *Model) syncPlaylist() {
 	m.updatePlaylistCounts()
+	m.updateLibraryIcons()
 	if m.view == viewPlaylist {
 		m.updatePlaylistItems()
+	}
+}
+
+func (m *Model) updateLibraryIcons() {
+	items := m.libList.Items()
+	for i, it := range items {
+		itm := it.(item)
+		inPl := m.playlistCounts[itm.path] > 0
+		if itm.inPlaylist != inPl {
+			itm.inPlaylist = inPl
+			m.libList.SetItem(i, itm)
+		}
 	}
 }
 
@@ -98,9 +108,7 @@ func (m *Model) updatePlaylistCounts() {
 		for {
 			m.playlistCounts[dir]++
 			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
+			if parent == dir { break }
 			dir = parent
 		}
 	}
@@ -109,7 +117,8 @@ func (m *Model) updatePlaylistCounts() {
 // --- Metadata & Lyrics Helpers ---
 
 func (m *Model) getTrackMetadata(path string) ipc.TrackInfo {
-	conn, err := net.Dial("unix", ipc.LibrarySocketPath)
+	socketPath := ipc.GetSocketPath("library", m.session)
+	conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
 	if err != nil {
 		return ipc.TrackInfo{Title: filepath.Base(path), Path: path}
 	}
@@ -123,6 +132,86 @@ func (m *Model) getTrackMetadata(path string) ipc.TrackInfo {
 	var info ipc.TrackInfo
 	_ = dec.Decode(&info)
 	return info
+}
+
+func (m *Model) loadLyrics(path string) tea.Cmd {
+	return func() tea.Msg {
+		lrcPath := strings.TrimSuffix(path, filepath.Ext(path)) + ".lrc"
+		if _, err := os.Stat(lrcPath); err == nil {
+			content, _ := os.ReadFile(lrcPath)
+			lyrics, _ := m.parseLyrics(string(content))
+			return lyricsDownloadedMsg{path: lrcPath, lyrics: lyrics}
+		}
+		return nil
+	}
+}
+
+func (m *Model) syncMetadataAndArt(songPath string) tea.Cmd {
+	session := m.session
+	return func() tea.Msg {
+		socketPath := ipc.GetSocketPath("fetcher", session)
+		conn, err := net.DialTimeout("unix", socketPath, 200*time.Millisecond)
+		if err != nil {
+			return nil
+		}
+		defer func() { _ = conn.Close() }()
+
+		enc := gob.NewEncoder(conn)
+		dec := gob.NewDecoder(conn)
+
+		info, _ := os.Stat(songPath)
+		isDir := info != nil && info.IsDir()
+
+		dir := songPath
+		if !isDir {
+			dir = filepath.Dir(songPath)
+		}
+
+		track := m.getTrackMetadata(songPath)
+		
+		// For directories, getTrackMetadata might not be as useful, 
+		// use directory name as potential album name if needed
+		artist := track.Artist
+		album := track.Album
+		if isDir && album == "" {
+			album = filepath.Base(songPath)
+		}
+
+		// Request Lyrics (only for files)
+		if !isDir {
+			lrcPath := strings.TrimSuffix(songPath, filepath.Ext(songPath)) + ".lrc"
+			if _, err := os.Stat(lrcPath); os.IsNotExist(err) && m.cfg.AutoDownloadLyrics {
+				_ = enc.Encode(ipc.Command{Type: ipc.CmdFetchLyrics, Payload: []string{artist, track.Title, lrcPath}})
+				var res ipc.MsgFetchResult
+				if err := dec.Decode(&res); err == nil && res.Type == "lyrics" {
+					lyrics, _ := m.parseLyrics(res.Content)
+					return lyricsDownloadedMsg{path: lrcPath, lyrics: lyrics}
+				}
+			}
+		}
+
+		// Request Art
+		if m.cfg.AutoDownloadArt {
+			// Check if already has local art
+			hasArt := false
+			for _, n := range []string{"cover.jpg", "folder.jpg", "album.jpg", "band.jpg", "artist.jpg"} {
+				if _, err := os.Stat(filepath.Join(dir, n)); err == nil {
+					hasArt = true
+					break
+				}
+			}
+
+			if !hasArt {
+				_ = enc.Encode(ipc.Command{Type: ipc.CmdFetchArt, Payload: []string{artist, album, dir}})
+				var res ipc.MsgFetchResult
+				if err := dec.Decode(&res); err == nil && res.Type == "art" {
+					return artDownloadedMsg(res.Path)
+				}
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m *Model) parseLyrics(content string) ([]lrcLine, bool) {
@@ -144,9 +233,7 @@ func (m *Model) parseLyrics(content string) ([]lrcLine, bool) {
 	lastTime := time.Duration(0)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+		if line == "" { continue }
 		matches := re.FindStringSubmatch(line)
 		if len(matches) == 4 {
 			min, _ := time.ParseDuration(matches[1] + "m")
@@ -164,28 +251,28 @@ func (m *Model) parseLyrics(content string) ([]lrcLine, bool) {
 	return res, hasTimestamps
 }
 
-func (m *Model) addPathToPlaylist(path string) {
-	conn, err := net.Dial("unix", ipc.PlaylistSocketPath)
+func (m *Model) AddPathToPlaylist(path string) {
+	info, err := os.Stat(path)
 	if err != nil {
 		return
 	}
-	defer func() { _ = conn.Close() }()
 
-	enc := gob.NewEncoder(conn)
-
-	info, _ := os.Stat(path)
-	if info != nil && info.IsDir() {
-		_ = filepath.Walk(path, func(p string, f os.FileInfo, err error) error {
-			if err == nil && !f.IsDir() && utils.IsSupportedAudioFile(f.Name()) {
+	if info.IsDir() {
+		_ = filepath.Walk(path, func(p string, i os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !i.IsDir() && utils.IsSupportedAudioFile(p) {
+				if strings.ToLower(filepath.Ext(p)) == ".txt" {
+					return nil
+				}
 				track := m.getTrackMetadata(p)
-				_ = enc.Encode(ipc.Command{Type: ipc.CmdPlaylistAdd, Payload: track})
 				m.sendCommand(ipc.Command{Type: ipc.CmdPlaylistAdd, Payload: track})
 			}
 			return nil
 		})
-	} else if info != nil {
+	} else {
 		track := m.getTrackMetadata(path)
-		_ = enc.Encode(ipc.Command{Type: ipc.CmdPlaylistAdd, Payload: track})
 		m.sendCommand(ipc.Command{Type: ipc.CmdPlaylistAdd, Payload: track})
 	}
 }
@@ -193,32 +280,70 @@ func (m *Model) addPathToPlaylist(path string) {
 // --- IPC Helpers ---
 
 func (m *Model) listenToServer() tea.Cmd {
+	session := m.session
 	return func() tea.Msg {
 		if m.dec == nil {
-			return nil
+			socketPath := ipc.GetSocketPath("core", session)
+			conn, err := net.DialTimeout("unix", socketPath, 200*time.Millisecond)
+			if err == nil {
+				m.conn = conn
+				m.enc = gob.NewEncoder(conn)
+				m.dec = gob.NewDecoder(conn)
+			} else {
+				time.Sleep(500 * time.Millisecond)
+				return tickMsg(time.Now())
+			}
 		}
+		
 		var state ipc.PlayerState
 		if err := m.dec.Decode(&state); err != nil {
-			return errMsg(err)
+			m.dec = nil // Mark for reconnection
+			time.Sleep(500 * time.Millisecond)
+			return tickMsg(time.Now())
 		}
 		return serverStateMsg(state)
 	}
 }
 
-func (m *Model) cycleBGMode() {
-	for i := 0; i < 5; i++ {
-		m.bgMode = (m.bgMode + 1) % 5
-		if m.bgMode == bgImage && m.cfg.ImagePath == "" {
-			continue
+func (m *Model) requestVizFrame(w, h int, isPlaying, isMuted bool, vol float64, preset, colorMode, palette int, bg backgroundMode, startTime time.Time) tea.Cmd {
+	session := m.session
+	return func() tea.Msg {
+		if bg != bgVisualization { return nil }
+
+		socketPath := ipc.GetSocketPath("viz", session)
+		conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+		if err != nil { return nil }
+		defer func() { _ = conn.Close() }()
+
+		enc := gob.NewEncoder(conn)
+		dec := gob.NewDecoder(conn)
+
+		payload := map[string]interface{}{
+			"width":     w,
+			"height":    h,
+			"isPlaying": isPlaying && !isMuted,
+			"volume":    vol,
+			"pattern":   preset,
+			"colorMode": colorMode,
+			"palette":   palette,
+			"time":      time.Since(startTime).Seconds(),
 		}
-		if m.bgMode == bgKaraoke && len(m.currentLyrics) == 0 {
-			continue
-		}
-		break
+
+		_ = enc.Encode(ipc.Command{Type: ipc.CmdVizGenerate, Payload: payload})
+		var rendered string
+		if err := dec.Decode(&rendered); err != nil { return nil }
+		return vizFrameMsg(rendered)
 	}
 }
 
-// --- Formatting Helpers ---
+func (m *Model) cycleBGMode() {
+	for i := 0; i < 4; i++ {
+		m.bgMode = (m.bgMode + 1) % 4
+		if m.bgMode == bgImage && m.cfg.ImagePath == "" { continue }
+		if m.bgMode == bgKaraoke && len(m.currentLyrics) == 0 { continue }
+		break
+	}
+}
 
 func formatDuration(d time.Duration) string {
 	mins, secs := int(d.Minutes()), int(d.Seconds())%60

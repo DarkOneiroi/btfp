@@ -6,7 +6,7 @@
 package tests
 
 import (
-	"btfp/tui"
+	"btfp/services/ui/tui"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +26,7 @@ func TestAppLifecycle(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(musicDir, "test.mp3"), []byte("mock audio data"), 0644)
 
 	// 1. Initialize Model
-	m := tui.NewModel("library")
+	m := tui.NewModel("library", "music")
 
 	// 2. Mock Window Size
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -38,7 +38,7 @@ func TestAppLifecycle(t *testing.T) {
 }
 
 func TestLayoutOverflow(t *testing.T) {
-	m := tui.NewModel("library")
+	m := tui.NewModel("library", "music")
 	// Simulate terminal size
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -48,8 +48,7 @@ func TestLayoutOverflow(t *testing.T) {
 	}
 
 	// Basic height check: the output should be contained within terminal height
-	lines := strings.Count(view, "
-")
+	lines := strings.Count(view, "\n")
 	if lines > 25 {
 		t.Errorf("View has too many lines: %d, might overflow terminal", lines)
 	}

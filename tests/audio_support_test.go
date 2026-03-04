@@ -6,8 +6,8 @@
 package tests
 
 import (
-	"btfp/tui"
-	"btfp/utils"
+	"btfp/internal/utils"
+	"btfp/services/ui/tui"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +28,7 @@ func TestAudioFormatSupport(t *testing.T) {
 	}
 
 	// 1. Initialize Model
-	_ = tui.NewModel("library")
+	_ = tui.NewModel("library", "music")
 
 	// 2. Check utils for support
 	for _, f := range formats {
